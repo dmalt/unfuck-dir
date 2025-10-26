@@ -77,7 +77,11 @@ fn group_by_date(files: ReadDir) -> std::io::Result<HashMap<String, Vec<PathBuf>
     Ok(files_by_date)
 }
 
-fn move_files(files_grouping: HashMap<String, Vec<PathBuf>>, path: PathBuf) -> std::io::Result<()> {
+fn move_files(
+    files_grouping: HashMap<String, Vec<PathBuf>>,
+    path: PathBuf,
+    dry_run: bool,
+) -> std::io::Result<()> {
     for (dirname, group_files) in &files_grouping {
         if dirname == "Folders" {
             continue;
@@ -93,7 +97,11 @@ fn move_files(files_grouping: HashMap<String, Vec<PathBuf>>, path: PathBuf) -> s
                 folder_path.file_name().unwrap()
             );
             let dst = folder_path.join(&fname);
-            std::fs::rename(&file, &dst)?;
+            if dry_run {
+                println!("{:#?} -> {:#?}", fname, dst);
+            } else {
+                std::fs::rename(&file, &dst)?;
+            }
         }
     }
     Ok(())
@@ -140,7 +148,7 @@ fn main() -> std::io::Result<()> {
         GroupMode::Date => group_by_date(files)?,
         GroupMode::Type => group_by_type(files)?,
     };
-    move_files(files_grouping, path)?;
+    move_files(files_grouping, path, args.dry_run)?;
     // println!("{:#?}", files);
 
     Ok(())
