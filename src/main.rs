@@ -69,10 +69,12 @@ fn group_by_date(files: ReadDir) -> std::io::Result<HashMap<String, Vec<PathBuf>
 
         let datetime: DateTime<Local> = meta.modified()?.into();
         let date_string: String = datetime.format("%d-%m-%Y").to_string();
-        files_by_date
-            .entry(date_string)
-            .or_insert(Vec::new())
-            .push(path);
+        if path.is_file() {
+            files_by_date
+                .entry(date_string)
+                .or_insert(Vec::new())
+                .push(path);
+        }
     }
     Ok(files_by_date)
 }
