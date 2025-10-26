@@ -4,23 +4,23 @@ use std::fs::ReadDir;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
-static EXT_TO_TYPE: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
-    let type_to_exts: HashMap<&str, Vec<&str>> = HashMap::from([
-        ("Images", vec!["jpg", "jpeg", "png", "svg", "gif", "ai"]),
-        ("Books", vec!["epub", "mobi"]),
-        ("Documents", vec!["txt", "pdf", "md", "docx", "doc", "html"]),
-        ("Data", vec!["csv", "parquet", "xml"]),
-        ("Archives", vec!["zip", "rar", "tar", "gz"]),
-        ("Code", vec!["py", "sh"]),
-        ("Apps", vec!["dmg"]),
-        ("Keyboard Layouts", vec!["uf2", "keymap"]),
-        ("Tracks", vec!["gpx"]),
-    ]);
+const TYPE_TO_EXTS: &[(&str, &[&str])] = &[
+    ("Images", &["jpg", "jpeg", "png", "svg", "gif", "ai"]),
+    ("Books", &["epub", "mobi"]),
+    ("Documents", &["txt", "pdf", "md", "docx", "doc", "html"]),
+    ("Data", &["csv", "parquet", "xml"]),
+    ("Archives", &["zip", "rar", "tar", "gz"]),
+    ("Code", &["py", "sh"]),
+    ("Apps", &["dmg"]),
+    ("Keyboard Layouts", &["uf2", "keymap"]),
+    ("Tracks", &["gpx"]),
+];
 
+static EXT_TO_TYPE: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     let mut ext_to_type = HashMap::new();
-    for (file_type, extensions) in type_to_exts {
-        for ext in extensions {
-            ext_to_type.insert(ext, file_type);
+    for (file_type, extensions) in TYPE_TO_EXTS {
+        for ext in *extensions {
+            ext_to_type.insert(*ext, *file_type);
         }
     }
     ext_to_type
