@@ -119,6 +119,10 @@ struct Args {
     /// Group files by type or date
     #[arg(long, default_value = "type")]
     by: GroupMode,
+
+    /// Report the intended operations without executing them
+    #[arg(short, long, default_value = "false")]
+    dry_run: bool,
 }
 
 #[derive(Clone, ValueEnum)]
