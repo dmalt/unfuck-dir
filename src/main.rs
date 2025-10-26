@@ -42,15 +42,14 @@ fn group_by_type(files: ReadDir) -> std::io::Result<HashMap<String, Vec<PathBuf>
         let file = file?;
         let path = file.path();
 
-        let file_type = if path.is_file() {
-            let ext = path
-                .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("no_extension");
-            ext2type.get(ext).unwrap_or(&"Other").to_string()
-        } else {
-            "Folders".to_string()
-        };
+        if !path.is_file() {
+            continue;
+        }
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("no_extension");
+        let file_type = ext2type.get(ext).unwrap_or(&"Other").to_string();
         files_by_type
             .entry(file_type)
             .or_insert(Vec::new())
@@ -65,16 +64,17 @@ fn group_by_date(files: ReadDir) -> std::io::Result<HashMap<String, Vec<PathBuf>
     for file in files {
         let file = file?;
         let path = file.path();
+        if !path.is_file() {
+            continue;
+        }
         let meta = path.metadata()?;
 
         let datetime: DateTime<Local> = meta.modified()?.into();
         let date_string: String = datetime.format("%d-%m-%Y").to_string();
-        if path.is_file() {
-            files_by_date
-                .entry(date_string)
-                .or_insert(Vec::new())
-                .push(path);
-        }
+        files_by_date
+            .entry(date_string)
+            .or_insert(Vec::new())
+            .push(path);
     }
     Ok(files_by_date)
 }
@@ -93,11 +93,6 @@ fn move_files(
         std::fs::create_dir(&folder_path).ok();
         for file in group_files {
             let fname = file.file_name().unwrap();
-            println!(
-                "Moving {:#?} -> {:#?}",
-                fname,
-                folder_path.file_name().unwrap()
-            );
             let dst = folder_path.join(&fname);
             if dry_run {
                 println!("{:#?} -> {:#?}", fname, dst);
