@@ -66,7 +66,7 @@ struct Args {
 
     /// Show the current file extension groups that are used with by="type"
     #[arg(short, long, default_value = "false")]
-    show_extension_groups: bool,
+    show_categories: bool,
 }
 
 #[derive(Clone, ValueEnum)]
@@ -78,7 +78,7 @@ enum GroupMode {
 fn main() -> std::io::Result<()> {
     let args = Args::parse();
 
-    if args.show_extension_groups {
+    if args.show_categories {
         println!("{}", group::format_type_to_exts());
         return Ok(());
     }
