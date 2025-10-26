@@ -1,4 +1,5 @@
 use chrono::{DateTime, Local};
+use clap::{Parser, ValueEnum};
 use std::collections::HashMap;
 use std::fs::ReadDir;
 use std::{fs, path::PathBuf};
@@ -80,7 +81,7 @@ fn group_by_date(files: ReadDir) -> std::io::Result<HashMap<String, Vec<PathBuf>
 fn move_files(files_grouping: HashMap<String, Vec<PathBuf>>) -> std::io::Result<()> {
     for (dirname, group_files) in &files_grouping {
         if dirname == "Folders" {
-            continue
+            continue;
         }
         let folder_path = PathBuf::from(format!("/Users/dmitriialtukhov/Downloads/{}", dirname));
 
@@ -99,8 +100,39 @@ fn move_files(files_grouping: HashMap<String, Vec<PathBuf>>) -> std::io::Result<
     Ok(())
 }
 
+fn expand_tilde(path: &str) -> PathBuf {
+    if path.starts_with("~") {
+        let home = std::env::var("HOME").unwrap();
+        PathBuf::from(path.replacen("~", &home, 1))
+    } else {
+        PathBuf::from(path)
+    }
+}
+
+#[derive(Parser)]
+#[command(name = "downloads-sorter")]
+#[command(about = "Sort files by date or type")]
+struct Args {
+    /// Path to the folder to organize
+    #[arg(short, long, default_value = "~/Downloads")]
+    path: String,
+
+    /// Group files by type or date
+    #[arg(short, long, default_value = "type")]
+    by: GroupMode,
+}
+
+#[derive(Clone, ValueEnum)]
+enum GroupMode {
+    Type,
+    Date,
+}
+
 fn main() -> std::io::Result<()> {
-    let files = fs::read_dir("/Users/dmitriialtukhov/Downloads/")?;
+    let args = Args::parse();
+
+    let path = expand_tilde(&args.path);
+    let files = fs::read_dir(path)?;
     let by_date = false;
     let files_grouping = if by_date {
         group_by_date(files)?
