@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::fs::ReadDir;
 use std::{fs, path::PathBuf};
 
+/// Group files by the filetype
 fn group_by_type(files: ReadDir) -> std::io::Result<HashMap<String, Vec<PathBuf>>> {
     let mut files_by_type: HashMap<String, Vec<PathBuf>> = HashMap::new();
     let ext2type = HashMap::from([
@@ -58,6 +59,7 @@ fn group_by_type(files: ReadDir) -> std::io::Result<HashMap<String, Vec<PathBuf>
     Ok(files_by_type)
 }
 
+/// Group files by modification date
 fn group_by_date(files: ReadDir) -> std::io::Result<HashMap<String, Vec<PathBuf>>> {
     let mut files_by_date: HashMap<String, Vec<PathBuf>> = HashMap::new();
 
