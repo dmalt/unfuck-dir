@@ -2,20 +2,37 @@ use chrono::{DateTime, Local};
 use std::collections::HashMap;
 use std::fs::ReadDir;
 use std::path::PathBuf;
+use std::sync::LazyLock;
 
-fn get_file_type(ext: &str) -> &str {
-    match ext {
-        "jpg" | "jpeg" | "png" | "svg" | "gif" | "ai" | "webp" => "Images",
-        "epub" | "mobi" => "Books",
-        "txt" | "pdf" | "md" | "odp" | "xlsx" | "docx" | "doc" | "html" => "Documents",
-        "csv" | "parquet" | "xml" => "Data",
-        "zip" | "rar" | "tar" | "gz" => "Archives",
-        "py" | "sh" | "rs" | "js" | "ts" | "tsx" => "Code",
-        "dmg" => "Apps",
-        "uf2" | "keymap" => "Keyboard Layouts",
-        "gpx" => "Tracks",
-        _ => "Other",
+static EXT_TO_TYPE: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
+    let type_to_exts: HashMap<&str, Vec<&str>> = HashMap::from([
+        ("Images", vec!["jpg", "jpeg", "png", "svg", "gif", "ai"]),
+        ("Books", vec!["epub", "mobi"]),
+        ("Documents", vec!["txt", "pdf", "md", "docx", "doc", "html"]),
+        ("Data", vec!["csv", "parquet", "xml"]),
+        ("Archives", vec!["zip", "rar", "tar", "gz"]),
+        ("Code", vec!["py", "sh"]),
+        ("Apps", vec!["dmg"]),
+        ("Keyboard Layouts", vec!["uf2", "keymap"]),
+        ("Tracks", vec!["gpx"]),
+    ]);
+
+    let mut ext_to_type = HashMap::new();
+    for (file_type, extensions) in type_to_exts {
+        for ext in extensions {
+            ext_to_type.insert(ext, file_type);
+        }
     }
+    ext_to_type
+});
+
+const UNKNOWN_FILE_TYPE: &str = "Other";
+
+fn get_file_type(ext: &str) -> String {
+    EXT_TO_TYPE
+        .get(ext)
+        .unwrap_or(&UNKNOWN_FILE_TYPE)
+        .to_string()
 }
 
 /// Group files by the filetype
@@ -33,7 +50,7 @@ pub fn by_type(files: ReadDir) -> std::io::Result<HashMap<String, Vec<PathBuf>>>
             .extension()
             .and_then(|e| e.to_str())
             .unwrap_or("no_extension");
-        let file_type = get_file_type(ext).to_string();
+        let file_type = get_file_type(ext);
         files_by_type
             .entry(file_type)
             .or_insert(Vec::new())
