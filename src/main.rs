@@ -64,7 +64,7 @@ struct Args {
     #[arg(short, long, default_value = "false")]
     dry_run: bool,
 
-    /// Show the current file extension groups
+    /// Show the current file extension groups that are used with by="type"
     #[arg(short, long, default_value = "false")]
     show_extension_groups: bool,
 }
