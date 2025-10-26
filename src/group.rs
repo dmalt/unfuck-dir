@@ -35,6 +35,25 @@ fn get_file_type(ext: &str) -> String {
         .to_string()
 }
 
+pub fn format_type_to_exts() -> String {
+    let mut res = String::new();
+
+    let mut sorted: Vec<_> = TYPE_TO_EXTS.iter().collect();
+    sorted.sort_by_key(|(file_type, _)| file_type);
+
+    for (file_type, extensions) in sorted {
+        res.push_str(format!("\n{:<20} :: ", file_type).as_str());
+
+        let mut ext_sorted: Vec<_> = extensions.iter().collect();
+        ext_sorted.sort();
+
+        res.push_str(extensions.join(", ").as_str());
+    }
+    res.push_str(format!("\n{:<20} :: ", UNKNOWN_FILE_TYPE).as_str());
+    res.push_str("<everything else>");
+    res
+}
+
 /// Group files by the filetype
 pub fn by_type(files: ReadDir) -> std::io::Result<HashMap<String, Vec<PathBuf>>> {
     let mut files_by_type: HashMap<String, Vec<PathBuf>> = HashMap::new();
