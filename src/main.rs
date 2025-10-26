@@ -63,6 +63,10 @@ struct Args {
     /// Report the intended operations without executing them
     #[arg(short, long, default_value = "false")]
     dry_run: bool,
+
+    /// Show the current file extension groups
+    #[arg(short, long, default_value = "false")]
+    show_extension_groups: bool,
 }
 
 #[derive(Clone, ValueEnum)]
@@ -73,6 +77,11 @@ enum GroupMode {
 
 fn main() -> std::io::Result<()> {
     let args = Args::parse();
+
+    if args.show_extension_groups {
+        println!("{}", group::format_type_to_exts());
+        return Ok(());
+    }
 
     let path = expand_tilde(&args.path)?;
     let files = fs::read_dir(&path)?;
