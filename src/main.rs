@@ -1,85 +1,7 @@
-use chrono::{DateTime, Local};
+mod group;
 use clap::{Parser, ValueEnum};
 use std::collections::HashMap;
-use std::fs::ReadDir;
 use std::{fs, path::PathBuf};
-
-/// Group files by the filetype
-fn group_by_type(files: ReadDir) -> std::io::Result<HashMap<String, Vec<PathBuf>>> {
-    let mut files_by_type: HashMap<String, Vec<PathBuf>> = HashMap::new();
-    let ext2type = HashMap::from([
-        ("jpg", "Images"),
-        ("jpeg", "Images"),
-        ("png", "Images"),
-        ("svg", "Images"),
-        ("gif", "Images"),
-        ("ai", "Images"),
-        ("epub", "Books"),
-        ("mobi", "Books"),
-        ("txt", "Documents"),
-        ("pdf", "Documents"),
-        ("md", "Documents"),
-        ("odp", "Documents"),
-        ("xlsx", "Documents"),
-        ("docx", "Documents"),
-        ("doc", "Documents"),
-        ("html", "Documents"),
-        ("csv", "Data"),
-        ("parquet", "Data"),
-        ("xml", "Data"),
-        ("zip", "Archives"),
-        ("rar", "Archives"),
-        ("tar", "Archives"),
-        ("gz", "Archives"),
-        ("py", "Code"),
-        ("sh", "Code"),
-        ("dmg", "Apps"),
-        ("uf2", "Keyboard Layouts"),
-        ("keymap", "Keyboard Layouts"),
-        ("gpx", "Tracks"),
-    ]);
-
-    for file in files {
-        let file = file?;
-        let path = file.path();
-
-        if !path.is_file() {
-            continue;
-        }
-        let ext = path
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("no_extension");
-        let file_type = ext2type.get(ext).unwrap_or(&"Other").to_string();
-        files_by_type
-            .entry(file_type)
-            .or_insert(Vec::new())
-            .push(path);
-    }
-    Ok(files_by_type)
-}
-
-/// Group files by modification date
-fn group_by_date(files: ReadDir) -> std::io::Result<HashMap<String, Vec<PathBuf>>> {
-    let mut files_by_date: HashMap<String, Vec<PathBuf>> = HashMap::new();
-
-    for file in files {
-        let file = file?;
-        let path = file.path();
-        if !path.is_file() {
-            continue;
-        }
-        let meta = path.metadata()?;
-
-        let datetime: DateTime<Local> = meta.modified()?.into();
-        let date_string: String = datetime.format("%d-%m-%Y").to_string();
-        files_by_date
-            .entry(date_string)
-            .or_insert(Vec::new())
-            .push(path);
-    }
-    Ok(files_by_date)
-}
 
 /// Format the move report
 fn format_mv(from: &PathBuf, to: &PathBuf) -> String {
@@ -155,8 +77,8 @@ fn main() -> std::io::Result<()> {
     let path = expand_tilde(&args.path)?;
     let files = fs::read_dir(&path)?;
     let files_grouping = match args.by {
-        GroupMode::Date => group_by_date(files)?,
-        GroupMode::Type => group_by_type(files)?,
+        GroupMode::Date => group::by_date(files)?,
+        GroupMode::Type => group::by_type(files)?,
     };
     move_files(files_grouping, path, args.dry_run)?;
     // println!("{:#?}", files);
