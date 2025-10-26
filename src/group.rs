@@ -44,7 +44,7 @@ pub fn format_type_to_exts() -> String {
     for (file_type, extensions) in sorted {
         res.push_str(format!("\n{:<20} :: ", file_type).as_str());
 
-        let mut ext_sorted: Vec<&&str> = extensions.iter().collect();
+        let mut ext_sorted = extensions.to_vec();
         ext_sorted.sort();
 
         res.push_str(extensions.join(", ").as_str());
