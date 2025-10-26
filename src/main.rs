@@ -62,7 +62,7 @@ struct Args {
 
     /// Report the intended operations without executing them
     #[arg(short, long, default_value = "false")]
-    dry_run: bool,
+    dry: bool,
 
     /// Show the current file extension groups that are used with by="type"
     #[arg(short, long, default_value = "false")]
@@ -89,7 +89,7 @@ fn main() -> std::io::Result<()> {
         GroupMode::Date => group::by_date(files)?,
         GroupMode::Type => group::by_type(files)?,
     };
-    move_files(files_grouping, path, args.dry_run)?;
+    move_files(files_grouping, path, args.dry)?;
     // println!("{:#?}", files);
 
     Ok(())
