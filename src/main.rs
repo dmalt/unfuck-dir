@@ -95,7 +95,7 @@ fn move_files(
             let fname = file.file_name().unwrap();
             let dst = folder_path.join(&fname);
             if dry_run {
-                println!("{:#?} -> {:#?}", fname, dst);
+                println!("{} -> {}", file.display(), dst.display());
             } else {
                 std::fs::rename(&file, &dst)?;
             }
