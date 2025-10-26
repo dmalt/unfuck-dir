@@ -79,6 +79,15 @@ fn group_by_date(files: ReadDir) -> std::io::Result<HashMap<String, Vec<PathBuf>
     Ok(files_by_date)
 }
 
+/// Format the move report
+fn format_mv(from: &PathBuf, to: &PathBuf) -> String {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let from_short = from.display().to_string().replace(&home, "~");
+    let to_short = to.display().to_string().replace(&home, "~");
+    format!("{} -> {}", from_short, to_short)
+}
+
+/// Move files to folders based on grouping
 fn move_files(
     files_grouping: HashMap<String, Vec<PathBuf>>,
     path: PathBuf,
@@ -95,7 +104,7 @@ fn move_files(
             let fname = file.file_name().unwrap();
             let dst = folder_path.join(&fname);
             if dry_run {
-                println!("{} -> {}", file.display(), dst.display());
+                println!("{}", format_mv(&file, &dst));
             } else {
                 std::fs::rename(&file, &dst)?;
             }
@@ -104,12 +113,14 @@ fn move_files(
     Ok(())
 }
 
-fn expand_tilde(path: &str) -> PathBuf {
+/// Expand '~' char to the value of the HOME env variable
+fn expand_tilde(path: &str) -> std::io::Result<PathBuf> {
     if path.starts_with("~") {
-        let home = std::env::var("HOME").unwrap();
-        PathBuf::from(path.replacen("~", &home, 1))
+        let home = std::env::var("HOME")
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::NotFound, e))?;
+        Ok(PathBuf::from(path.replacen("~", &home, 1)))
     } else {
-        PathBuf::from(path)
+        Ok(PathBuf::from(path))
     }
 }
 
@@ -139,7 +150,7 @@ enum GroupMode {
 fn main() -> std::io::Result<()> {
     let args = Args::parse();
 
-    let path = expand_tilde(&args.path);
+    let path = expand_tilde(&args.path)?;
     let files = fs::read_dir(&path)?;
     let files_grouping = match args.by {
         GroupMode::Date => group_by_date(files)?,
