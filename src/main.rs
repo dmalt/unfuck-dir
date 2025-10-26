@@ -27,6 +27,8 @@ fn group_by_type(files: ReadDir) -> std::io::Result<HashMap<String, Vec<PathBuf>
         ("xml", "Data"),
         ("zip", "Archives"),
         ("rar", "Archives"),
+        ("tar", "Archives"),
+        ("gz", "Archives"),
         ("py", "Code"),
         ("sh", "Code"),
         ("dmg", "Apps"),
@@ -75,6 +77,28 @@ fn group_by_date(files: ReadDir) -> std::io::Result<HashMap<String, Vec<PathBuf>
     Ok(files_by_date)
 }
 
+fn move_files(files_grouping: HashMap<String, Vec<PathBuf>>) -> std::io::Result<()> {
+    for (dirname, group_files) in &files_grouping {
+        if dirname == "Folders" {
+            continue
+        }
+        let folder_path = PathBuf::from(format!("/Users/dmitriialtukhov/Downloads/{}", dirname));
+
+        std::fs::create_dir(&folder_path).ok();
+        for file in group_files {
+            let fname = file.file_name().unwrap();
+            println!(
+                "Moving {:#?} -> {:#?}",
+                fname,
+                folder_path.file_name().unwrap()
+            );
+            let dst = folder_path.join(&fname);
+            std::fs::rename(&file, &dst)?;
+        }
+    }
+    Ok(())
+}
+
 fn main() -> std::io::Result<()> {
     let files = fs::read_dir("/Users/dmitriialtukhov/Downloads/")?;
     let by_date = false;
@@ -83,7 +107,7 @@ fn main() -> std::io::Result<()> {
     } else {
         group_by_type(files)?
     };
-    println!("{:#?}", files_grouping);
+    move_files(files_grouping)?;
     // println!("{:#?}", files);
 
     Ok(())
