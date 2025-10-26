@@ -117,7 +117,7 @@ struct Args {
     path: String,
 
     /// Group files by type or date
-    #[arg(short, long, default_value = "type")]
+    #[arg(long, default_value = "type")]
     by: GroupMode,
 }
 
