@@ -14,14 +14,14 @@ fn format_mv(from: &PathBuf, to: &PathBuf) -> String {
 /// Move files to folders based on grouping
 fn move_files(
     files_grouping: HashMap<String, Vec<PathBuf>>,
-    path: PathBuf,
+    folder_to_organize: PathBuf,
     dry_run: bool,
 ) -> std::io::Result<()> {
     for (dirname, group_files) in &files_grouping {
         if dirname == "Folders" {
             continue;
         }
-        let folder_path = path.join(dirname);
+        let folder_path = folder_to_organize.join(dirname);
 
         std::fs::create_dir(&folder_path).ok();
         for file in group_files {
