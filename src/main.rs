@@ -1,41 +1,7 @@
 mod group;
+mod r#move;
 use clap::{Parser, ValueEnum};
-use std::collections::HashMap;
 use std::{fs, path::PathBuf};
-
-/// Format the move report
-fn format_mv(from: &PathBuf, to: &PathBuf) -> String {
-    let home = std::env::var("HOME").unwrap_or_default();
-    let from_short = from.display().to_string().replace(&home, "~");
-    let to_short = to.display().to_string().replace(&home, "~");
-    format!("{} -> {}", from_short, to_short)
-}
-
-/// Move files to folders based on grouping
-fn move_files(
-    files_grouping: HashMap<String, Vec<PathBuf>>,
-    folder_to_organize: PathBuf,
-    dry_run: bool,
-) -> std::io::Result<()> {
-    for (dirname, group_files) in &files_grouping {
-        if dirname == "Folders" {
-            continue;
-        }
-        let folder_path = folder_to_organize.join(dirname);
-
-        std::fs::create_dir(&folder_path).ok();
-        for file in group_files {
-            let fname = file.file_name().unwrap();
-            let dst = folder_path.join(&fname);
-            if dry_run {
-                println!("{}", format_mv(&file, &dst));
-            } else {
-                std::fs::rename(&file, &dst)?;
-            }
-        }
-    }
-    Ok(())
-}
 
 /// Expand '~' char to the value of the HOME env variable
 fn expand_tilde(path: &str) -> std::io::Result<PathBuf> {
@@ -89,7 +55,7 @@ fn main() -> std::io::Result<()> {
         GroupMode::Date => group::by_date(files)?,
         GroupMode::Type => group::by_type(files)?,
     };
-    move_files(files_grouping, path, args.dry)?;
+    r#move::move_grouped_files(files_grouping, path, args.dry)?;
     // println!("{:#?}", files);
 
     Ok(())
