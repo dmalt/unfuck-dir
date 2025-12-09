@@ -1,7 +1,7 @@
 mod group;
 mod r#move;
 use clap::{Parser, ValueEnum};
-use std::{fs, path::PathBuf};
+use std::{collections::HashMap, fs, path::PathBuf};
 
 /// Expand '~' char to the value of the HOME env variable
 fn expand_tilde(path: &str) -> std::io::Result<PathBuf> {
@@ -41,6 +41,21 @@ enum GroupMode {
     Date,
 }
 
+fn format_stats(grouping: &HashMap<String, Vec<PathBuf>>) -> String {
+    let mut res = String::new();
+    let total_n_files: usize = grouping.values().map(|v| v.len()).sum();
+    let header = format!("Moved {:<3} files:\n", total_n_files);
+    res.push_str(&header);
+    let mut sorted: Vec<_> = grouping.iter().collect();
+    sorted.sort_by_key(|(_, files)| std::cmp::Reverse(files.len()));
+    for (key, value) in sorted {
+        let n_files = value.len();
+        let row = format!("  {:<20} {:>3}\n", key, n_files);
+        res.push_str(&row);
+    }
+    return res;
+}
+
 fn main() -> std::io::Result<()> {
     let args = Args::parse();
 
@@ -55,8 +70,9 @@ fn main() -> std::io::Result<()> {
         GroupMode::Date => group::by_date(files)?,
         GroupMode::Type => group::by_type(files)?,
     };
+    let stats = format_stats(&files_grouping);
     r#move::move_grouped_files(files_grouping, path, args.dry)?;
-    // println!("{:#?}", files);
+    println!("\n{}", stats);
 
     Ok(())
 }
