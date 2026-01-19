@@ -1,6 +1,6 @@
 use chrono::{DateTime, Local};
 use std::collections::HashMap;
-use std::fs::ReadDir;
+use std::fs::{DirEntry};
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
@@ -55,11 +55,12 @@ pub fn format_type_to_exts() -> String {
 }
 
 /// Group files by the filetype
-pub fn by_type(files: ReadDir) -> std::io::Result<HashMap<String, Vec<PathBuf>>> {
+pub fn by_type(
+    files: impl Iterator<Item = DirEntry>,
+) -> std::io::Result<HashMap<String, Vec<PathBuf>>> {
     let mut files_by_type: HashMap<String, Vec<PathBuf>> = HashMap::new();
 
     for file in files {
-        let file = file?;
         let path = file.path();
 
         if !path.is_file() {
@@ -79,11 +80,12 @@ pub fn by_type(files: ReadDir) -> std::io::Result<HashMap<String, Vec<PathBuf>>>
 }
 
 /// Group files by modification date
-pub fn by_date(files: ReadDir) -> std::io::Result<HashMap<String, Vec<PathBuf>>> {
+pub fn by_date(
+    files: impl Iterator<Item = DirEntry>,
+) -> std::io::Result<HashMap<String, Vec<PathBuf>>> {
     let mut files_by_date: HashMap<String, Vec<PathBuf>> = HashMap::new();
 
     for file in files {
-        let file = file?;
         let path = file.path();
         if !path.is_file() {
             continue;

@@ -16,7 +16,7 @@ fn expand_tilde(path: &str) -> std::io::Result<PathBuf> {
 
 #[derive(Parser)]
 #[command(name = "downloads-sorter")]
-#[command(about = "Sort files by date or type")]
+#[command(about = "Organize files by date or type.")]
 struct Args {
     /// Path to the folder to organize
     #[arg(short, long, default_value = "~/Downloads")]
@@ -30,9 +30,13 @@ struct Args {
     #[arg(short, long, default_value = "false")]
     dry: bool,
 
-    /// Show the current file extension groups that are used with by="type"
-    #[arg(short, long, default_value = "false")]
+    /// Just show the current file extension groups that are used with by="type" and exit
+    #[arg(short, long)]
     show_categories: bool,
+
+    /// Include the dotfiles
+    #[arg(short, long)]
+    include_dotfiles: bool,
 }
 
 #[derive(Clone, ValueEnum)]
@@ -44,7 +48,7 @@ enum GroupMode {
 fn format_stats(grouping: &HashMap<String, Vec<PathBuf>>) -> String {
     let mut res = String::new();
     let total_n_files: usize = grouping.values().map(|v| v.len()).sum();
-    let header = format!("Moved {:<3} files:\n", total_n_files);
+    let header = format!("Moved {} files:\n", total_n_files);
     res.push_str(&header);
     let mut sorted: Vec<_> = grouping.iter().collect();
     sorted.sort_by_key(|(_, files)| std::cmp::Reverse(files.len()));
@@ -65,7 +69,14 @@ fn main() -> std::io::Result<()> {
     }
 
     let path = expand_tilde(&args.path)?;
-    let files = fs::read_dir(&path)?;
+    let files = fs::read_dir(&path)?.filter_map(|x| x.ok()).filter(|e| {
+        if !args.include_dotfiles {
+            !e.file_name().to_string_lossy().starts_with(".")
+        } else {
+            true
+        }
+    });
+
     let files_grouping = match args.by {
         GroupMode::Date => group::by_date(files)?,
         GroupMode::Type => group::by_type(files)?,

@@ -61,9 +61,8 @@ pub fn move_grouped_files(
             while dst.exists() {
                 dst = rename_duplicate(&dst);
             }
-            if dry_run {
-                println!("{}", format_mv(&file, &dst));
-            } else {
+            println!("{}", format_mv(&file, &dst));
+            if !dry_run {
                 std::fs::rename(&file, &dst)?;
             }
         }
