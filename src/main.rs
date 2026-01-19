@@ -36,7 +36,7 @@ struct Args {
 
     /// Include the dotfiles
     #[arg(short, long)]
-    include_dotfiles: bool,
+    include_dotfiles: bool,  // TODO: think of a better short flag. -i is confusing
 }
 
 #[derive(Clone, ValueEnum)]
