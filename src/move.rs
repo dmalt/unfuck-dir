@@ -15,6 +15,7 @@ fn format_mv(from: &PathBuf, to: &PathBuf) -> String {
 fn try_increment_suffix(stem: &str) -> Option<(&str, u8)> {
     let (new_stem, new_sfx) = stem.rsplit_once(DUPLICATE_DELIMETER)?;
     let new_sfx: u8 = new_sfx.parse().ok()?;
+    // if the suffix is larger than 255, we consider it part of the name.
     let incremented = new_sfx.checked_add(1)?;
     Some((new_stem, incremented))
 }
