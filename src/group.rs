@@ -14,6 +14,7 @@ const TYPE_TO_EXTS: &[(&str, &[&str])] = &[
     ("Apps", &["dmg"]),
     ("Keyboard Layouts", &["uf2", "keymap"]),
     ("Tracks", &["gpx"]),
+    ("Videos", &["mkv", "mp4", "avi"]),
 ];
 
 static EXT_TO_TYPE: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
