@@ -12,20 +12,17 @@ fn format_mv(from: &PathBuf, to: &PathBuf) -> String {
     format!("{} -> {}", from_short, to_short)
 }
 
+fn try_increment_suffix(stem: &str) -> Option<(&str, u8)> {
+    let (new_stem, new_sfx) = stem.rsplit_once(DUPLICATE_DELIMETER)?;
+    let new_sfx: u8 = new_sfx.parse().ok()?;
+    let incremented = new_sfx.checked_add(1)?;
+    Some((new_stem, incremented))
+}
+
 /// Rename a file stem to handle duplicates
 fn rename_duplicate_stem(stem: &str) -> String {
-    let Some((new_stem, new_sfx)) = stem.rsplit_once(DUPLICATE_DELIMETER) else {
-        return format!("{}{}{}", stem, DUPLICATE_DELIMETER, "1");
-    };
-    let Ok(new_sfx_int) = new_sfx.parse::<u8>() else {
-        return format!("{}{}{}", stem, DUPLICATE_DELIMETER, "1");
-    };
-
-    let Some(incremented) = new_sfx_int.checked_add(1) else {
-        return format!("{}{}{}", stem, DUPLICATE_DELIMETER, "1");
-    };
-
-    return format!("{}{}{}", new_stem, DUPLICATE_DELIMETER, incremented);
+    let (new_stem, suffix) = try_increment_suffix(stem).unwrap_or((stem, 1));
+    format!("{}{}{}", new_stem, DUPLICATE_DELIMETER, suffix)
 }
 
 fn rename_duplicate(dst: &PathBuf) -> PathBuf {
