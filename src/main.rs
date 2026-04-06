@@ -35,8 +35,8 @@ struct Args {
     show_categories: bool,
 
     /// Include the dotfiles
-    #[arg(short, long)]
-    include_dotfiles: bool,  // TODO: think of a better short flag. -i is confusing
+    #[arg(short = 'i', long)]
+    include_dotfiles: bool, // TODO: think of a better short flag. -i is confusing
 }
 
 #[derive(Clone, ValueEnum)]
@@ -82,6 +82,9 @@ fn main() -> std::io::Result<()> {
         GroupMode::Type => group::by_type(files)?,
     };
     let stats = format_stats(&files_grouping);
+    if args.dry {
+        println!("[DRY RUN]");
+    }
     r#move::move_grouped_files(files_grouping, path, args.dry)?;
     println!("\n{}", stats);
 

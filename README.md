@@ -21,6 +21,12 @@ unfk --show-categories
 
 ```sh
 cargo build
+cargo build --release  # build with optimizations for release; slower build, faster run
 cargo test
 cargo run -- --dry
+cargo check  # see if the code compiles without building the binary; faster than build
 ```
+
+## References
+
+[the book](https://doc.rust-lang.org/book/ch01-03-hello-cargo.html)

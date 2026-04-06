@@ -56,12 +56,14 @@ pub fn move_grouped_files(
 
         std::fs::create_dir(&folder_path).ok();
         for file in group_files {
-            let fname = file.file_name().expect("should be a file path");
+            let fname = file.file_name().expect("Should be a file path");
             let mut dst = folder_path.join(&fname);
             while dst.exists() {
                 dst = rename_duplicate(&dst);
             }
-            println!("{}", format_mv(&file, &dst));
+            if dry_run {
+                println!("{}", format_mv(&file, &dst));
+            }
             if !dry_run {
                 std::fs::rename(&file, &dst)?;
             }
