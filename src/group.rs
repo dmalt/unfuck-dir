@@ -1,6 +1,6 @@
 use chrono::{DateTime, Local};
 use std::collections::HashMap;
-use std::fs::{DirEntry};
+use std::fs::DirEntry;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
@@ -10,11 +10,13 @@ const TYPE_TO_EXTS: &[(&str, &[&str])] = &[
     ("Documents", &["txt", "pdf", "md", "docx", "doc", "html"]),
     ("Data", &["csv", "parquet", "xml"]),
     ("Archives", &["zip", "rar", "tar", "gz"]),
-    ("Code", &["py", "sh"]),
+    ("Code", &["py", "sh", "go", "rs"]),
     ("Apps", &["dmg"]),
     ("Keyboard Layouts", &["uf2", "keymap"]),
     ("Tracks", &["gpx"]),
     ("Videos", &["mkv", "mp4", "avi"]),
+    ("Torrents", &["torrent"]),
+    ("Music", &["mp3", "aac", "flac", "wav"]),
 ];
 
 static EXT_TO_TYPE: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
