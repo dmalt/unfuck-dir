@@ -46,12 +46,6 @@ struct Args {
     include_dotfiles: bool, // TODO: think of a better short flag. -i is confusing
 }
 
-impl Args {
-    fn verbose(&self) -> bool {
-        self.verbose || self.dry
-    }
-}
-
 #[derive(Clone, ValueEnum)]
 enum GroupMode {
     Type,
