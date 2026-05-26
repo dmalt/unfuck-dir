@@ -33,6 +33,10 @@ struct Args {
     #[arg(short, long, default_value = "false")]
     dry: bool,
 
+    /// Enable verbose output
+    #[arg(short, long, default_value = "false")]
+    verbose: bool,
+
     /// Just show the current file extension groups that are used with by="type" and exit
     #[arg(short, long)]
     show_categories: bool,
@@ -40,6 +44,12 @@ struct Args {
     /// Include the dotfiles
     #[arg(short = 'i', long)]
     include_dotfiles: bool, // TODO: think of a better short flag. -i is confusing
+}
+
+impl Args {
+    fn verbose(&self) -> bool {
+        self.verbose || self.dry
+    }
 }
 
 #[derive(Clone, ValueEnum)]
@@ -117,7 +127,7 @@ fn main() {
     if args.dry {
         eprintln!("[DRY RUN]");
     }
-    let errors = move_grouped_files(files_grouping, path, args.dry);
+    let errors = move_grouped_files(files_grouping, path, args.dry, args.verbose);
     eprintln!("\n{}", stats);
     if !errors.is_empty() {
         eprintln!("\nERRORS WHILE MOVING FILES");
