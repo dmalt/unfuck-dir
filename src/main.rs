@@ -1,21 +1,6 @@
 use clap::{Parser, ValueEnum};
-use std::{
-    collections::HashMap,
-    env::VarError,
-    fs,
-    path::{Path, PathBuf},
-    process,
-};
-use unfk::{group, move_grouped_files};
-
-/// Expand '~' char to the value of the HOME env variable
-fn maybe_expand_tilde(path: &str) -> Result<PathBuf, VarError> {
-    if !path.starts_with("~") {
-        return Ok(PathBuf::from(path));
-    }
-    let home = std::env::var("HOME")?;
-    Ok(PathBuf::from(path.replacen("~", &home, 1)))
-}
+use std::{collections::HashMap, fs, path, process};
+use unfk::{group, maybe_expand_tilde, move_grouped_files};
 
 #[derive(Parser)]
 #[command(name = "downloads-sorter")]
@@ -52,7 +37,7 @@ enum GroupMode {
     Date,
 }
 
-fn format_stats(grouping: &HashMap<String, Vec<PathBuf>>) -> String {
+fn format_stats(grouping: &HashMap<String, Vec<path::PathBuf>>) -> String {
     let mut res = String::new();
     let total_n_files: usize = grouping.values().map(|v| v.len()).sum();
     let header = format!("Moved {} files:\n", total_n_files);
@@ -72,10 +57,10 @@ fn is_dotfile(entry: &fs::DirEntry) -> bool {
 }
 
 fn group_files(
-    dir_path: &Path,
+    dir_path: &path::Path,
     include_dotfiles: bool,
     by: GroupMode,
-) -> HashMap<String, Vec<PathBuf>> {
+) -> HashMap<String, Vec<path::PathBuf>> {
     let Ok(files) = fs::read_dir(dir_path) else {
         eprintln!("Couldn't read directory {}", dir_path.display());
         process::exit(1);

@@ -1,7 +1,7 @@
 pub mod group;
 use std::collections::HashMap;
 use std::io::ErrorKind::AlreadyExists;
-use std::{fs, path};
+use std::{env, fs, path};
 
 /// Separator used between filename and duplicate number (e.g., "file__1.txt")
 const DUPLICATE_DELIMETER: &str = "__";
@@ -80,6 +80,15 @@ pub fn move_grouped_files(
         }
     }
     errors
+}
+
+/// Expand '~' char to the value of the HOME env variable
+pub fn maybe_expand_tilde(path: &str) -> Result<path::PathBuf, env::VarError> {
+    if !path.starts_with("~") {
+        return Ok(path::PathBuf::from(path));
+    }
+    let home = std::env::var("HOME")?;
+    Ok(path::PathBuf::from(path.replacen("~", &home, 1)))
 }
 
 #[cfg(test)]
