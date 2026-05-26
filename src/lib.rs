@@ -1,12 +1,13 @@
 pub mod group;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::io::ErrorKind::AlreadyExists;
+use std::{fs, io, path};
 
 /// Separator used between filename and duplicate number (e.g., "file__1.txt")
 const DUPLICATE_DELIMETER: &str = "__";
 
 /// Format the move report
-fn format_mv(from: &PathBuf, to: &PathBuf) -> String {
+fn format_mv(from: &path::PathBuf, to: &path::PathBuf) -> String {
     let home = std::env::var("HOME").unwrap_or_default();
     let from_short = from.display().to_string().replace(&home, "~");
     let to_short = to.display().to_string().replace(&home, "~");
@@ -27,7 +28,7 @@ fn rename_duplicate_stem(stem: &str) -> String {
     format!("{}{}{}", new_stem, DUPLICATE_DELIMETER, suffix)
 }
 
-fn rename_duplicate(dst: &PathBuf) -> PathBuf {
+fn rename_duplicate(dst: &path::Path) -> path::PathBuf {
     let stem = dst
         .file_prefix()
         .expect("dst should always be a file path")
@@ -38,23 +39,29 @@ fn rename_duplicate(dst: &PathBuf) -> PathBuf {
     let ext = dst.extension().and_then(|x| x.to_str()).unwrap_or("");
     let new_name = format!("{}.{}", normalized_stem, ext);
 
-    PathBuf::from(dst.with_file_name(new_name))
+    path::PathBuf::from(dst.with_file_name(new_name))
 }
 
 /// Move files to folders based on grouping
 pub fn move_grouped_files(
-    files_grouping: HashMap<String, Vec<PathBuf>>,
-    folder_to_organize: PathBuf,
+    files_grouping: HashMap<String, Vec<path::PathBuf>>,
+    folder_to_organize: path::PathBuf,
     dry_run: bool,
-) -> std::io::Result<()> {
+) -> Vec<String> {
     let mut folder_path;
+    let mut errors: Vec<String> = Vec::new();
     for (dirname, group_files) in &files_grouping {
         if dirname == "Folders" {
             continue;
         }
         folder_path = folder_to_organize.join(dirname);
 
-        let _ = std::fs::create_dir(&folder_path)?;
+        if let Err(e) = fs::create_dir(&folder_path)
+            && e.kind() != AlreadyExists
+        {
+            errors.push(format!("Failed to create {folder_path:?}: '{e}'"));
+            continue;
+        };
         for file in group_files {
             let fname = file.file_name().expect("Should be a file path");
             let mut dst = folder_path.join(&fname);
@@ -62,14 +69,15 @@ pub fn move_grouped_files(
                 dst = rename_duplicate(&dst);
             }
             if dry_run {
+                // TODO: add --verbosity handling here
                 println!("{}", format_mv(&file, &dst));
             }
-            if !dry_run {
-                std::fs::rename(&file, &dst)?;
+            if !dry_run && let Err(e) = fs::rename(&file, &dst) {
+                errors.push(format!("Failed to move {file:?}: '{e}'"));
             }
         }
     }
-    Ok(())
+    errors
 }
 
 #[cfg(test)]

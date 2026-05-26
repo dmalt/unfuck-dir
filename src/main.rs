@@ -1,5 +1,11 @@
 use clap::{Parser, ValueEnum};
-use std::{collections::HashMap, env::VarError, fs, path::PathBuf, process};
+use std::{
+    collections::HashMap,
+    env::VarError,
+    fs,
+    path::{Path, PathBuf},
+    process,
+};
 use unfk::{group, move_grouped_files};
 
 /// Expand '~' char to the value of the HOME env variable
@@ -61,23 +67,13 @@ fn is_dotfile(entry: &fs::DirEntry) -> bool {
     entry.file_name().to_string_lossy().starts_with(".")
 }
 
-fn main() {
-    let args = Args::parse();
-
-    if args.show_categories {
-        println!("{}", group::format_type_to_exts());
-        process::exit(0);
-    }
-
-    let Ok(path) = maybe_expand_tilde(&args.path) else {
-        eprintln!(
-            "Failed to expand tilde in '{}'. Is the $HOME env var set?",
-            &args.path
-        );
-        process::exit(1);
-    };
-    let Ok(files) = fs::read_dir(&path) else {
-        eprintln!("Couldn't read directory {}", path.display());
+fn group_files(
+    dir_path: &Path,
+    include_dotfiles: bool,
+    by: GroupMode,
+) -> HashMap<String, Vec<PathBuf>> {
+    let Ok(files) = fs::read_dir(dir_path) else {
+        eprintln!("Couldn't read directory {}", dir_path.display());
         process::exit(1);
     };
     let files = files
@@ -88,9 +84,9 @@ fn main() {
                 None
             }
         })
-        .filter(|e| args.include_dotfiles || !is_dotfile(e));
+        .filter(|e| include_dotfiles || !is_dotfile(e));
 
-    let files_grouping = match args.by {
+    match by {
         GroupMode::Date => {
             let Ok(grouping) = group::by_date(files) else {
                 eprintln!("Accessing files modification date is not supported on this platform.");
@@ -99,14 +95,34 @@ fn main() {
             grouping
         }
         GroupMode::Type => group::by_type(files),
+    }
+}
+
+fn main() {
+    let args = Args::parse();
+
+    if args.show_categories {
+        println!("{}", group::format_type_to_exts());
+        process::exit(0);
+    }
+    let Ok(path) = maybe_expand_tilde(&args.path) else {
+        eprintln!(
+            "Failed to expand tilde in '{}'. Is the $HOME env var set?",
+            &args.path
+        );
+        process::exit(1);
     };
+    let files_grouping = group_files(&path, args.include_dotfiles, args.by);
     let stats = format_stats(&files_grouping);
     if args.dry {
         println!("[DRY RUN]");
     }
-    if let Err(e) = move_grouped_files(files_grouping, path, args.dry) {
-        eprintln!("Couldn't move files: {e}");
-        process::exit(1);
-    };
+    let errors = move_grouped_files(files_grouping, path, args.dry);
     println!("\n{}", stats);
+    if !errors.is_empty() {
+        eprintln!("\nERRORS WHILE MOVING FILES");
+        for e in errors {
+            eprintln!("{e}");
+        }
+    }
 }

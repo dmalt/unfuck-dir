@@ -1,5 +1,6 @@
 use chrono::{DateTime, Local};
-use std::{collections::HashMap, fs, io, path::PathBuf, sync::LazyLock};
+use std::collections::HashMap;
+use std::{fs, io, path, sync};
 
 const TYPE_TO_EXTS: &[(&str, &[&str])] = &[
     ("Images", &["jpg", "jpeg", "png", "svg", "gif", "ai"]),
@@ -16,7 +17,7 @@ const TYPE_TO_EXTS: &[(&str, &[&str])] = &[
     ("Music", &["mp3", "aac", "flac", "wav"]),
 ];
 
-static EXT_TO_TYPE: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
+static EXT_TO_TYPE: sync::LazyLock<HashMap<&str, &str>> = sync::LazyLock::new(|| {
     let mut ext_to_type = HashMap::new();
     for (file_type, extensions) in TYPE_TO_EXTS {
         for ext in *extensions {
@@ -47,7 +48,7 @@ pub fn format_type_to_exts() -> String {
         let mut ext_sorted = extensions.to_vec();
         ext_sorted.sort();
 
-        res.push_str(extensions.join(", ").as_str());
+        res.push_str(ext_sorted.join(", ").as_str());
     }
     res.push_str(format!("\n{:<20} :: ", UNKNOWN_FILE_TYPE).as_str());
     res.push_str("<everything else>");
@@ -55,8 +56,8 @@ pub fn format_type_to_exts() -> String {
 }
 
 /// Group files by the filetype
-pub fn by_type(files: impl Iterator<Item = fs::DirEntry>) -> HashMap<String, Vec<PathBuf>> {
-    let mut files_by_type: HashMap<String, Vec<PathBuf>> = HashMap::new();
+pub fn by_type(files: impl Iterator<Item = fs::DirEntry>) -> HashMap<String, Vec<path::PathBuf>> {
+    let mut files_by_type: HashMap<String, Vec<path::PathBuf>> = HashMap::new();
 
     for file in files {
         let path = file.path();
@@ -80,8 +81,8 @@ pub fn by_type(files: impl Iterator<Item = fs::DirEntry>) -> HashMap<String, Vec
 /// Group files by modification date
 pub fn by_date(
     files: impl Iterator<Item = fs::DirEntry>,
-) -> io::Result<HashMap<String, Vec<PathBuf>>> {
-    let mut files_by_date: HashMap<String, Vec<PathBuf>> = HashMap::new();
+) -> io::Result<HashMap<String, Vec<path::PathBuf>>> {
+    let mut files_by_date: HashMap<String, Vec<path::PathBuf>> = HashMap::new();
 
     for file in files {
         let path = file.path();
