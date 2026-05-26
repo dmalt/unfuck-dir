@@ -1,3 +1,4 @@
+use anyhow::{Result};
 use chrono::{DateTime, Local};
 use std::collections::HashMap;
 use std::fs::DirEntry;
@@ -83,9 +84,7 @@ pub fn by_type(
 }
 
 /// Group files by modification date
-pub fn by_date(
-    files: impl Iterator<Item = DirEntry>,
-) -> std::io::Result<HashMap<String, Vec<PathBuf>>> {
+pub fn by_date(files: impl Iterator<Item = DirEntry>) -> Result<HashMap<String, Vec<PathBuf>>> {
     let mut files_by_date: HashMap<String, Vec<PathBuf>> = HashMap::new();
 
     for file in files {
