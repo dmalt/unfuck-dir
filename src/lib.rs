@@ -1,17 +1,19 @@
 pub mod group;
 use std::collections::HashMap;
 use std::io::ErrorKind::AlreadyExists;
-use std::{fs, io, path};
+use std::{fs, path};
 
 /// Separator used between filename and duplicate number (e.g., "file__1.txt")
 const DUPLICATE_DELIMETER: &str = "__";
+/// Separator used when showing source and destination paths for the moves
+const FORMAT_MOVE_SEPARATOR: &str = " -> ";
 
 /// Format the move report
 fn format_mv(from: &path::PathBuf, to: &path::PathBuf) -> String {
     let home = std::env::var("HOME").unwrap_or_default();
     let from_short = from.display().to_string().replace(&home, "~");
     let to_short = to.display().to_string().replace(&home, "~");
-    format!("{} -> {}", from_short, to_short)
+    format!("'{}'{FORMAT_MOVE_SEPARATOR}'{}'", from_short, to_short)
 }
 
 fn try_increment_suffix(stem: &str) -> Option<(&str, u8)> {
