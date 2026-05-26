@@ -115,10 +115,10 @@ fn main() {
     let files_grouping = group_files(&path, args.include_dotfiles, args.by);
     let stats = format_stats(&files_grouping);
     if args.dry {
-        println!("[DRY RUN]");
+        eprintln!("[DRY RUN]");
     }
     let errors = move_grouped_files(files_grouping, path, args.dry);
-    println!("\n{}", stats);
+    eprintln!("\n{}", stats);
     if !errors.is_empty() {
         eprintln!("\nERRORS WHILE MOVING FILES");
         for e in errors {
