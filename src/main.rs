@@ -1,10 +1,10 @@
-mod group;
-mod r#move;
+use anyhow::{Context, Result};
 use clap::{Parser, ValueEnum};
 use std::{collections::HashMap, fs, path::PathBuf};
+use unfk::move_grouped_files;
 
 /// Expand '~' char to the value of the HOME env variable
-fn expand_tilde(path: &str) -> std::io::Result<PathBuf> {
+fn expand_tilde(path: &str) -> Result<PathBuf> {
     if path.starts_with("~") {
         let home = std::env::var("HOME")
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::NotFound, e))?;
@@ -57,35 +57,32 @@ fn format_stats(grouping: &HashMap<String, Vec<PathBuf>>) -> String {
         let row = format!("  {:<20} {:>3}\n", key, n_files);
         res.push_str(&row);
     }
-    return res;
+    res
 }
 
-fn main() -> std::io::Result<()> {
+fn main() -> Result<()> {
     let args = Args::parse();
 
     if args.show_categories {
-        println!("{}", group::format_type_to_exts());
+        println!("{}", unfk::group::format_type_to_exts());
         return Ok(());
     }
 
     let path = expand_tilde(&args.path)?;
-    let files = fs::read_dir(&path)?.filter_map(|x| x.ok()).filter(|e| {
-        if !args.include_dotfiles {
-            !e.file_name().to_string_lossy().starts_with(".")
-        } else {
-            true
-        }
-    });
+    let files = fs::read_dir(&path)
+        .context(format!("couldn't read directory {}", path.display()))?
+        .filter_map(|x| x.ok())
+        .filter(|e| args.include_dotfiles || !e.file_name().to_string_lossy().starts_with("."));
 
     let files_grouping = match args.by {
-        GroupMode::Date => group::by_date(files)?,
-        GroupMode::Type => group::by_type(files)?,
+        GroupMode::Date => unfk::group::by_date(files)?,
+        GroupMode::Type => unfk::group::by_type(files)?,
     };
     let stats = format_stats(&files_grouping);
     if args.dry {
         println!("[DRY RUN]");
     }
-    r#move::move_grouped_files(files_grouping, path, args.dry)?;
+    move_grouped_files(files_grouping, path, args.dry)?;
     println!("\n{}", stats);
 
     Ok(())

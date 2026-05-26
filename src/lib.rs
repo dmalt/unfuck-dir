@@ -1,3 +1,4 @@
+pub mod group;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -46,13 +47,14 @@ pub fn move_grouped_files(
     folder_to_organize: PathBuf,
     dry_run: bool,
 ) -> std::io::Result<()> {
+    let mut folder_path;
     for (dirname, group_files) in &files_grouping {
         if dirname == "Folders" {
             continue;
         }
-        let folder_path = folder_to_organize.join(dirname);
+        folder_path = folder_to_organize.join(dirname);
 
-        std::fs::create_dir(&folder_path).ok();
+        let _ = std::fs::create_dir(&folder_path)?;
         for file in group_files {
             let fname = file.file_name().expect("Should be a file path");
             let mut dst = folder_path.join(&fname);
