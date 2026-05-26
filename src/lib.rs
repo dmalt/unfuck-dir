@@ -9,7 +9,7 @@ const DUPLICATE_DELIMETER: &str = "__";
 const FORMAT_MOVE_SEPARATOR: &str = " -> ";
 
 /// Format the move report
-fn format_mv(from: &path::PathBuf, to: &path::PathBuf) -> String {
+fn format_mv(from: &path::Path, to: &path::Path) -> String {
     let home = std::env::var("HOME").unwrap_or_default();
     let from_short = from.display().to_string().replace(&home, "~");
     let to_short = to.display().to_string().replace(&home, "~");
