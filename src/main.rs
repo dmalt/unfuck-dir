@@ -1,17 +1,14 @@
-use anyhow::{Context, Result};
 use clap::{Parser, ValueEnum};
-use std::{collections::HashMap, fs, path::PathBuf};
-use unfk::move_grouped_files;
+use std::{collections::HashMap, env::VarError, fs, path::PathBuf, process};
+use unfk::{group, move_grouped_files};
 
 /// Expand '~' char to the value of the HOME env variable
-fn expand_tilde(path: &str) -> Result<PathBuf> {
-    if path.starts_with("~") {
-        let home = std::env::var("HOME")
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::NotFound, e))?;
-        Ok(PathBuf::from(path.replacen("~", &home, 1)))
-    } else {
-        Ok(PathBuf::from(path))
+fn maybe_expand_tilde(path: &str) -> Result<PathBuf, VarError> {
+    if !path.starts_with("~") {
+        return Ok(PathBuf::from(path));
     }
+    let home = std::env::var("HOME")?;
+    Ok(PathBuf::from(path.replacen("~", &home, 1)))
 }
 
 #[derive(Parser)]
@@ -60,30 +57,56 @@ fn format_stats(grouping: &HashMap<String, Vec<PathBuf>>) -> String {
     res
 }
 
-fn main() -> Result<()> {
+fn is_dotfile(entry: &fs::DirEntry) -> bool {
+    entry.file_name().to_string_lossy().starts_with(".")
+}
+
+fn main() {
     let args = Args::parse();
 
     if args.show_categories {
-        println!("{}", unfk::group::format_type_to_exts());
-        return Ok(());
+        println!("{}", group::format_type_to_exts());
+        process::exit(0);
     }
 
-    let path = expand_tilde(&args.path)?;
-    let files = fs::read_dir(&path)
-        .context(format!("couldn't read directory {}", path.display()))?
-        .filter_map(|x| x.ok())
-        .filter(|e| args.include_dotfiles || !e.file_name().to_string_lossy().starts_with("."));
+    let Ok(path) = maybe_expand_tilde(&args.path) else {
+        eprintln!(
+            "Failed to expand tilde in '{}'. Is the $HOME env var set?",
+            &args.path
+        );
+        process::exit(1);
+    };
+    let Ok(files) = fs::read_dir(&path) else {
+        eprintln!("Couldn't read directory {}", path.display());
+        process::exit(1);
+    };
+    let files = files
+        .filter_map(|x| match x {
+            Ok(e) => Some(e),
+            Err(e) => {
+                eprintln!("Warning: skipping entry: '{e}'");
+                None
+            }
+        })
+        .filter(|e| args.include_dotfiles || !is_dotfile(e));
 
     let files_grouping = match args.by {
-        GroupMode::Date => unfk::group::by_date(files)?,
-        GroupMode::Type => unfk::group::by_type(files)?,
+        GroupMode::Date => {
+            let Ok(grouping) = group::by_date(files) else {
+                eprintln!("Accessing files modification date is not supported on this platform.");
+                process::exit(1);
+            };
+            grouping
+        }
+        GroupMode::Type => group::by_type(files),
     };
     let stats = format_stats(&files_grouping);
     if args.dry {
         println!("[DRY RUN]");
     }
-    move_grouped_files(files_grouping, path, args.dry)?;
+    if let Err(e) = move_grouped_files(files_grouping, path, args.dry) {
+        eprintln!("Couldn't move files: {e}");
+        process::exit(1);
+    };
     println!("\n{}", stats);
-
-    Ok(())
 }

@@ -1,9 +1,5 @@
-use anyhow::{Result};
 use chrono::{DateTime, Local};
-use std::collections::HashMap;
-use std::fs::DirEntry;
-use std::path::PathBuf;
-use std::sync::LazyLock;
+use std::{collections::HashMap, fs, io, path::PathBuf, sync::LazyLock};
 
 const TYPE_TO_EXTS: &[(&str, &[&str])] = &[
     ("Images", &["jpg", "jpeg", "png", "svg", "gif", "ai"]),
@@ -59,9 +55,7 @@ pub fn format_type_to_exts() -> String {
 }
 
 /// Group files by the filetype
-pub fn by_type(
-    files: impl Iterator<Item = DirEntry>,
-) -> std::io::Result<HashMap<String, Vec<PathBuf>>> {
+pub fn by_type(files: impl Iterator<Item = fs::DirEntry>) -> HashMap<String, Vec<PathBuf>> {
     let mut files_by_type: HashMap<String, Vec<PathBuf>> = HashMap::new();
 
     for file in files {
@@ -80,11 +74,13 @@ pub fn by_type(
             .or_insert(Vec::new())
             .push(path);
     }
-    Ok(files_by_type)
+    files_by_type
 }
 
 /// Group files by modification date
-pub fn by_date(files: impl Iterator<Item = DirEntry>) -> Result<HashMap<String, Vec<PathBuf>>> {
+pub fn by_date(
+    files: impl Iterator<Item = fs::DirEntry>,
+) -> io::Result<HashMap<String, Vec<PathBuf>>> {
     let mut files_by_date: HashMap<String, Vec<PathBuf>> = HashMap::new();
 
     for file in files {
