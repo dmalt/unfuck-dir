@@ -49,6 +49,7 @@ pub fn move_grouped_files(
     files_grouping: HashMap<String, Vec<path::PathBuf>>,
     folder_to_organize: path::PathBuf,
     dry_run: bool,
+    verbose: bool,
 ) -> Vec<String> {
     let mut folder_path;
     let mut errors: Vec<String> = Vec::new();
@@ -70,8 +71,7 @@ pub fn move_grouped_files(
             while dst.exists() {
                 dst = rename_duplicate(&dst);
             }
-            if dry_run {
-                // TODO: add --verbosity handling here
+            if dry_run || verbose {
                 println!("{}", format_mv(&file, &dst));
             }
             if !dry_run && let Err(e) = fs::rename(&file, &dst) {
