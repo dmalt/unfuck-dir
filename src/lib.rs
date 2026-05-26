@@ -1,4 +1,6 @@
 pub mod group;
+pub mod history;
+
 use std::collections::HashMap;
 use std::io::ErrorKind::AlreadyExists;
 use std::{env, fs, path};
@@ -59,7 +61,7 @@ pub fn move_grouped_files(
         }
         folder_path = folder_to_organize.join(dirname);
 
-        if let Err(e) = fs::create_dir(&folder_path)
+        if !dry_run && let Err(e) = fs::create_dir(&folder_path)
             && e.kind() != AlreadyExists
         {
             errors.push(format!("Failed to create {folder_path:?}: '{e}'"));
@@ -96,25 +98,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_rename_duplicate_stem_first_duplicate() {
+    fn rename_duplicate_stem_first_duplicate() {
         let res = rename_duplicate_stem("some_name");
         assert_eq!(res, "some_name__1");
     }
 
     #[test]
-    fn test_rename_duplicate_stem_second_duplicate() {
+    fn rename_duplicate_stem_second_duplicate() {
         let res = rename_duplicate_stem("some_name__1");
         assert_eq!(res, "some_name__2");
     }
 
     #[test]
-    fn test_rename_duplicate_stem_nth_duplicate() {
+    fn rename_duplicate_stem_nth_duplicate() {
         let res = rename_duplicate_stem("some_name__6");
         assert_eq!(res, "some_name__7");
     }
 
     #[test]
-    fn test_rename_duplicate_stem_max_duplicate() {
+    fn rename_duplicate_stem_max_duplicate() {
         let res = rename_duplicate_stem("some_name__255");
         assert_eq!(res, "some_name__255__1");
     }
