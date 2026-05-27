@@ -2,20 +2,21 @@ pub mod group;
 pub mod history;
 
 use std::collections::HashMap;
-use std::io::ErrorKind::AlreadyExists;
-use std::{env, fs, path};
+use std::{env, ffi, fs, path};
 
 /// Separator used between filename and duplicate number (e.g., "file__1.txt")
 const DUPLICATE_DELIMETER: &str = "__";
 /// Separator used when showing source and destination paths for the moves
 const FORMAT_MOVE_SEPARATOR: &str = " -> ";
 
+const MAX_DUPLICATES: u16 = 10000;
+
 /// Format the move report
-fn format_mv(from: &path::Path, to: &path::Path) -> String {
+pub fn format_mv(from: &path::Path, to: &path::Path) -> String {
     let home = std::env::var("HOME").unwrap_or_default();
     let from_short = from.display().to_string().replace(&home, "~");
     let to_short = to.display().to_string().replace(&home, "~");
-    format!("'{}'{FORMAT_MOVE_SEPARATOR}'{}'", from_short, to_short)
+    format!("\"{}\"{FORMAT_MOVE_SEPARATOR}\"{}\"", from_short, to_short)
 }
 
 fn try_increment_suffix(stem: &str) -> Option<(&str, u8)> {
@@ -46,42 +47,85 @@ fn rename_duplicate(dst: &path::Path) -> path::PathBuf {
     path::PathBuf::from(dst.with_file_name(new_name))
 }
 
-/// Move files to folders based on grouping
-pub fn move_grouped_files(
-    files_grouping: HashMap<String, Vec<path::PathBuf>>,
-    folder_to_organize: path::PathBuf,
-    dry_run: bool,
-    verbose: bool,
-) -> Vec<String> {
+pub fn plan_folders(
+    files_grouping: &HashMap<String, Vec<path::PathBuf>>,
+    folder_to_organize: &path::Path,
+) -> Vec<path::PathBuf> {
     let mut folder_path;
-    let mut errors: Vec<String> = Vec::new();
-    for (dirname, group_files) in &files_grouping {
+    let mut folders_to_create: Vec<path::PathBuf> = Vec::new();
+    for (dirname, _group_files) in files_grouping {
         if dirname == "Folders" {
             continue;
         }
         folder_path = folder_to_organize.join(dirname);
 
-        if !dry_run && let Err(e) = fs::create_dir(&folder_path)
-            && e.kind() != AlreadyExists
-        {
-            errors.push(format!("Failed to create {folder_path:?}: '{e}'"));
-            continue;
-        };
-        for file in group_files {
-            let fname = file.file_name().expect("Should be a file path");
-            let mut dst = folder_path.join(&fname);
-            while dst.exists() {
-                dst = rename_duplicate(&dst);
-            }
-            if dry_run || verbose {
-                println!("{}", format_mv(&file, &dst));
-            }
-            if !dry_run && let Err(e) = fs::rename(&file, &dst) {
-                errors.push(format!("Failed to move {file:?}: '{e}'"));
-            }
+        if !folder_path.exists() {
+            folders_to_create.push(folder_path);
         }
     }
-    errors
+    folders_to_create
+}
+
+pub fn create_folders(folders: &[path::PathBuf]) -> Vec<Result<(), String>> {
+    folders
+        .iter()
+        .map(|fp| fs::create_dir(fp).map_err(|e| format!("Failed to create {fp:?}: '{e}'")))
+        .collect()
+}
+
+pub struct Move {
+    pub src: path::PathBuf,
+    pub dst: path::PathBuf,
+}
+
+fn make_nonexistent_dst(folder_path: &path::Path, fname: &ffi::OsStr) -> path::PathBuf {
+    let mut dst = folder_path.join(&fname);
+    for _ in 0..MAX_DUPLICATES {
+        if !dst.exists() {
+            break;
+        }
+        dst = rename_duplicate(&dst);
+    }
+    if dst.exists() {
+        panic!("exceeded {MAX_DUPLICATES} duplicates for {dst:?}");
+    }
+    dst
+}
+
+pub fn plan_moves(
+    files_grouping: &HashMap<String, Vec<path::PathBuf>>,
+    folder_to_organize: &path::Path,
+) -> Vec<Move> {
+    let mut folder_path;
+    let mut moves: Vec<Move> = Vec::new();
+    for (dirname, group_files) in files_grouping {
+        if dirname == "Folders" {
+            continue;
+        }
+        folder_path = folder_to_organize.join(dirname);
+
+        for src in group_files {
+            let fname = src
+                .file_name()
+                .expect("must be a file path by construction");
+            let dst = make_nonexistent_dst(&folder_path, fname);
+            moves.push(Move {
+                src: src.clone(),
+                dst,
+            });
+        }
+    }
+    moves
+}
+
+pub fn perform_moves(moves: &[Move]) -> Vec<Result<(), String>> {
+    moves
+        .iter()
+        .map(|mv| {
+            fs::rename(&mv.src, &mv.dst)
+                .map_err(|e| format!("Failed to move '{:?}' to '{:?}': '{e}'", mv.src, mv.dst))
+        })
+        .collect()
 }
 
 /// Expand '~' char to the value of the HOME env variable
