@@ -1,6 +1,8 @@
 use clap::{Parser, ValueEnum};
 use std::{collections::HashMap, fs, path, process};
-use unfk::{group, maybe_expand_tilde, move_grouped_files};
+use unfk::{
+    create_folders, format_mv, group, maybe_expand_tilde, perform_moves, plan_folders, plan_moves,
+};
 
 #[derive(Parser)]
 #[command(name = "downloads-sorter")]
@@ -44,11 +46,13 @@ fn format_stats(grouping: &HashMap<String, Vec<path::PathBuf>>) -> String {
     res.push_str(&header);
     let mut sorted: Vec<_> = grouping.iter().collect();
     sorted.sort_by_key(|(_, files)| std::cmp::Reverse(files.len()));
-    for (key, value) in sorted {
-        let n_files = value.len();
-        let row = format!("  {:<20} {:>3}\n", key, n_files);
-        res.push_str(&row);
-    }
+
+    let rows: String = sorted
+        .iter()
+        .map(|(k, v)| format!("  {:<20} {:>3}", k, v.len()))
+        .collect::<Vec<_>>()
+        .join("\n");
+    res.push_str(&rows);
     res
 }
 
@@ -104,14 +108,40 @@ fn main() {
     let files_grouping = group_files(&path, args.include_dotfiles, args.by);
     let stats = format_stats(&files_grouping);
     if args.dry {
-        eprintln!("[DRY RUN]");
+        eprintln!("[DRY RUN]\n");
     }
-    let errors = move_grouped_files(files_grouping, path, args.dry, args.verbose);
-    eprintln!("\n{}", stats);
-    if !errors.is_empty() {
-        eprintln!("\nERRORS WHILE MOVING FILES");
-        for e in errors {
-            eprintln!("{e}");
+    let folders_to_create = plan_folders(&files_grouping, &path);
+    let moves = plan_moves(&files_grouping, &path);
+
+    if args.dry || args.verbose {
+        for f in &folders_to_create {
+            println!("[mkdir] {f:?}");
+        }
+        if !folders_to_create.is_empty() {
+            println!();
+        }
+
+        for mv in &moves {
+            println!("{}", format_mv(&mv.src, &mv.dst));
         }
     }
+
+    if !args.dry {
+        let folder_results = create_folders(&folders_to_create);
+        let move_results = perform_moves(&moves);
+
+        let errors: Vec<&String> = folder_results
+            .iter()
+            .chain(move_results.iter())
+            .filter_map(|r| r.as_ref().err())
+            .collect();
+        if !errors.is_empty() {
+            eprintln!("\nERRORS WHILE MOVING FILES");
+            for e in errors {
+                eprintln!("{e}");
+            }
+        }
+    }
+
+    eprintln!("\n{}", stats);
 }
