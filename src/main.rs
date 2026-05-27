@@ -1,8 +1,6 @@
 use clap::{Parser, ValueEnum};
 use std::{collections::HashMap, fs, path, process};
-use unfk::{
-    create_folders, format_mv, group, maybe_expand_tilde, perform_moves, plan_folders, plan_moves,
-};
+use unfk;
 
 #[derive(Parser)]
 #[command(name = "downloads-sorter")]
@@ -81,13 +79,13 @@ fn group_files(
 
     match by {
         GroupMode::Date => {
-            let Ok(grouping) = group::by_date(files) else {
+            let Ok(grouping) = unfk::group::by_date(files) else {
                 eprintln!("Accessing files modification date is not supported on this platform.");
                 process::exit(1);
             };
             grouping
         }
-        GroupMode::Type => group::by_type(files),
+        GroupMode::Type => unfk::group::by_type(files),
     }
 }
 
@@ -95,10 +93,10 @@ fn main() {
     let args = Args::parse();
 
     if args.show_categories {
-        println!("{}", group::format_type_to_exts());
+        println!("{}", unfk::group::format_type_to_exts());
         process::exit(0);
     }
-    let Ok(path) = maybe_expand_tilde(&args.path) else {
+    let Ok(path) = unfk::maybe_expand_tilde(&args.path) else {
         eprintln!(
             "Failed to expand tilde in '{}'. Is the $HOME env var set?",
             &args.path
@@ -110,8 +108,8 @@ fn main() {
     if args.dry {
         eprintln!("[DRY RUN]\n");
     }
-    let folders_to_create = plan_folders(&files_grouping, &path);
-    let moves = plan_moves(&files_grouping, &path);
+    let folders_to_create = unfk::plan_folders(&files_grouping, &path);
+    let moves = unfk::plan_moves(&files_grouping, &path);
 
     if args.dry || args.verbose {
         for f in &folders_to_create {
@@ -122,13 +120,13 @@ fn main() {
         }
 
         for mv in &moves {
-            println!("{}", format_mv(&mv.src, &mv.dst));
+            println!("{}", unfk::format_mv(&mv.src, &mv.dst));
         }
     }
 
     if !args.dry {
-        let folder_results = create_folders(&folders_to_create);
-        let move_results = perform_moves(&moves);
+        let folder_results = unfk::create_folders(&folders_to_create);
+        let move_results = unfk::perform_moves(&moves);
 
         let errors: Vec<&String> = folder_results
             .iter()
