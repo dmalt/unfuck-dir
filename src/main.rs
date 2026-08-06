@@ -1,4 +1,5 @@
 use clap::{Parser, ValueEnum};
+use std::env::consts;
 use std::{collections::HashMap, fs, path, process};
 use unfk;
 
@@ -123,6 +124,8 @@ fn main() {
             println!("{}", unfk::format_mv(&mv.src, &mv.dst));
         }
     }
+
+    unfk::history::state_dir(consts::OS);
 
     if !args.dry {
         let folder_results = unfk::create_folders(&folders_to_create);
