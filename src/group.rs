@@ -70,10 +70,7 @@ pub fn by_type(files: impl Iterator<Item = fs::DirEntry>) -> HashMap<String, Vec
             .and_then(|e| e.to_str())
             .unwrap_or("no_extension");
         let file_type = get_file_type(ext);
-        files_by_type
-            .entry(file_type)
-            .or_default()
-            .push(path);
+        files_by_type.entry(file_type).or_default().push(path);
     }
     files_by_type
 }
@@ -93,10 +90,7 @@ pub fn by_date(
 
         let datetime: DateTime<Local> = meta.modified()?.into();
         let date_string: String = datetime.format("%d-%m-%Y").to_string();
-        files_by_date
-            .entry(date_string)
-            .or_default()
-            .push(path);
+        files_by_date.entry(date_string).or_default().push(path);
     }
     Ok(files_by_date)
 }
