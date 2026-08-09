@@ -52,7 +52,7 @@ mod tests {
     }
 
     #[test]
-    fn macos_returns_none_when_home_home_env_var_is_unset() {
+    fn macos_returns_none_when_home_env_var_is_unset() {
         with_var("HOME", None, || assert_eq!(state_dir("macos"), None));
     }
 
@@ -63,6 +63,17 @@ mod tests {
         with_var("XDG_STATE_HOME", Some(xdg_state_home), || {
             assert_eq!(state_dir("linux"), Some(expected))
         });
+    }
+
+    #[test]
+    fn bsd_flavors_use_linux_layout() {
+        let xdg_state_home = "/wherever/that/is";
+        let expected = PathBuf::from(xdg_state_home).join(STATE_DIRNAME);
+        for os in ["freebsd", "openbsd", "netbsd", "dragonfly"] {
+            with_var("XDG_STATE_HOME", Some(xdg_state_home), || {
+                assert_eq!(state_dir(os), Some(expected.clone()))
+            });
+        }
     }
 
     #[test]
