@@ -1,7 +1,6 @@
 use clap::{Parser, ValueEnum};
 use std::env::consts;
 use std::{collections::HashMap, fs, path, process};
-use unfk;
 
 #[derive(Parser)]
 #[command(name = "downloads-sorter")]

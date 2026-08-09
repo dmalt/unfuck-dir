@@ -72,7 +72,7 @@ pub fn by_type(files: impl Iterator<Item = fs::DirEntry>) -> HashMap<String, Vec
         let file_type = get_file_type(ext);
         files_by_type
             .entry(file_type)
-            .or_insert(Vec::new())
+            .or_default()
             .push(path);
     }
     files_by_type
@@ -95,7 +95,7 @@ pub fn by_date(
         let date_string: String = datetime.format("%d-%m-%Y").to_string();
         files_by_date
             .entry(date_string)
-            .or_insert(Vec::new())
+            .or_default()
             .push(path);
     }
     Ok(files_by_date)

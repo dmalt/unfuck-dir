@@ -1,6 +1,9 @@
 pub mod group;
 pub mod history;
 
+#[cfg(test)]
+mod temp_env;
+
 use std::collections::HashMap;
 use std::{env, ffi, fs, path};
 
@@ -44,7 +47,7 @@ fn rename_duplicate(dst: &path::Path) -> path::PathBuf {
     let ext = dst.extension().and_then(|x| x.to_str()).unwrap_or("");
     let new_name = format!("{}.{}", normalized_stem, ext);
 
-    path::PathBuf::from(dst.with_file_name(new_name))
+    dst.with_file_name(new_name)
 }
 
 pub fn plan_folders(
@@ -53,7 +56,7 @@ pub fn plan_folders(
 ) -> Vec<path::PathBuf> {
     let mut folder_path;
     let mut folders_to_create: Vec<path::PathBuf> = Vec::new();
-    for (dirname, _group_files) in files_grouping {
+    for dirname in files_grouping.keys() {
         if dirname == "Folders" {
             continue;
         }
@@ -79,7 +82,7 @@ pub struct Move {
 }
 
 fn make_nonexistent_dst(folder_path: &path::Path, fname: &ffi::OsStr) -> path::PathBuf {
-    let mut dst = folder_path.join(&fname);
+    let mut dst = folder_path.join(fname);
     for _ in 0..MAX_DUPLICATES {
         if !dst.exists() {
             break;
