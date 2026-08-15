@@ -5,6 +5,7 @@ pub mod history;
 mod temp_env;
 
 use std::collections::HashMap;
+use std::time::SystemTime;
 use std::{env, ffi, fs, path};
 
 /// Separator used between filename and duplicate number (e.g., "file__1.txt")
@@ -81,6 +82,16 @@ pub struct Move {
     pub dst: path::PathBuf,
 }
 
+pub struct FileIdentity {
+    pub mtime: Option<SystemTime>,
+    pub size_bytes: u64,
+}
+
+pub struct MoveRecord {
+    pub mv: Move,
+    pub identity: Option<FileIdentity>,
+}
+
 fn make_nonexistent_dst(folder_path: &path::Path, fname: &ffi::OsStr) -> path::PathBuf {
     let mut dst = folder_path.join(fname);
     for _ in 0..MAX_DUPLICATES {
@@ -121,14 +132,22 @@ pub fn plan_moves(
     moves
 }
 
-pub fn perform_moves(moves: &[Move]) -> Vec<Result<(), String>> {
-    moves
-        .iter()
-        .map(|mv| {
-            fs::rename(&mv.src, &mv.dst)
-                .map_err(|e| format!("Failed to move '{:?}' to '{:?}': '{e}'", mv.src, mv.dst))
-        })
-        .collect()
+pub fn perform_moves(moves: Vec<Move>) -> Vec<Result<MoveRecord, String>> {
+    let mut res = Vec::new();
+    for mv in moves.into_iter() {
+        if let Err(e) = fs::rename(&mv.src, &mv.dst) {
+            let err_str = format!("Failed to move '{:?}' to '{:?}': '{e}'", mv.src, mv.dst);
+            res.push(Err(err_str));
+            continue;
+        };
+        let fi = fs::metadata(&mv.dst).ok().map(|md| FileIdentity {
+            mtime: md.modified().ok(),
+            size_bytes: md.len(),
+        });
+        let move_record = MoveRecord { mv, identity: fi };
+        res.push(Ok(move_record))
+    }
+    res
 }
 
 /// Expand '~' char to the value of the HOME env variable
