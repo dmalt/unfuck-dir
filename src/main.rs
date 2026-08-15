@@ -111,6 +111,7 @@ fn main() {
     let folders_to_create = unfk::plan_folders(&files_grouping, &path);
     let moves = unfk::plan_moves(&files_grouping, &path);
 
+    todo!("Move the code below to reflect the actual performed moves");
     if args.dry || args.verbose {
         for f in &folders_to_create {
             println!("[mkdir] {f:?}");
@@ -128,12 +129,12 @@ fn main() {
 
     if !args.dry {
         let folder_results = unfk::create_folders(&folders_to_create);
-        let move_results = unfk::perform_moves(&moves);
+        let move_results = unfk::perform_moves(moves);
 
         let errors: Vec<&String> = folder_results
             .iter()
-            .chain(move_results.iter())
             .filter_map(|r| r.as_ref().err())
+            .chain(move_results.iter().filter_map(|r| r.as_ref().err()))
             .collect();
         if !errors.is_empty() {
             eprintln!("\nERRORS WHILE MOVING FILES");
