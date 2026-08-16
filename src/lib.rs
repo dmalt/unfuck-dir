@@ -18,8 +18,14 @@ const MAX_DUPLICATES: u16 = 10000;
 /// Format the move report
 pub fn format_mv(from: &path::Path, to: &path::Path) -> String {
     let home = std::env::var("HOME").unwrap_or_default();
-    let from_short = from.display().to_string().replace(&home, "~");
-    let to_short = to.display().to_string().replace(&home, "~");
+    let mut from_short = from.display().to_string();
+    if from_short.starts_with(&home) {
+        from_short = from_short.replacen(&home, "~", 1);
+    }
+    let mut to_short = to.display().to_string();
+    if to_short.starts_with(&home) {
+        to_short = to_short.replacen(&home, "~", 1);
+    }
     format!("\"{}\"{FORMAT_MOVE_SEPARATOR}\"{}\"", from_short, to_short)
 }
 
