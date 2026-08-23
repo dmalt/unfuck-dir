@@ -143,6 +143,12 @@ pub struct MoveRecord {
     pub identity: Option<FileIdentity>,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct UndoRecord {
+    pub moves: Vec<MoveRecord>,
+    pub folders: Vec<path::PathBuf>,
+}
+
 fn make_nonexistent_dst(folder_path: &path::Path, fname: &ffi::OsStr) -> path::PathBuf {
     let mut dst = folder_path.join(fname);
     for _ in 0..MAX_DUPLICATES {

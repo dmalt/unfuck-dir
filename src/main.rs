@@ -3,7 +3,8 @@ use std::env::consts;
 use std::fmt::Write;
 use std::path::PathBuf;
 use std::{collections::HashMap, fs, path, process};
-use unfk::{MoveRecord, UnfkError};
+use unfk::history::save;
+use unfk::{MoveRecord, UndoRecord, UnfkError};
 
 #[derive(Parser)]
 #[command(name = "downloads-sorter")]
@@ -158,10 +159,25 @@ fn main() {
     let stats = if args.dry {
         report_dry(&files_grouping)
     } else {
-        let _state_dir = unfk::history::state_dir(consts::OS);
         let folder_results: Vec<_> = folders_plan.into_iter().map(unfk::create_folder).collect();
         let move_results: Vec<_> = moves_plan.into_iter().map(unfk::perform_move).collect();
-        report_actual(&move_results, &folder_results)
+        let report = report_actual(&move_results, &folder_results);
+        if let Some(state_dir) = unfk::history::state_dir(consts::OS) {
+            let undo_rec = UndoRecord {
+                moves: move_results.into_iter().filter_map(Result::ok).collect(),
+                folders: folder_results.into_iter().filter_map(Result::ok).collect(),
+            };
+            if let Err(e) = save(&undo_rec, &state_dir) {
+                eprintln!(
+                    "Failed to write the undo log: {e}. The files were still moved but the --undo operation would be unavailable."
+                );
+            }
+        } else {
+            eprintln!(
+                "Failed to obtain the state directory. The files were still moved but the --undo operation would be unavailable."
+            );
+        }
+        report
     };
 
     eprintln!("{stats}");

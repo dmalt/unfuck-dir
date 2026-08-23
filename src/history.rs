@@ -1,7 +1,12 @@
 use std::env;
+use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 
+use crate::UndoRecord;
+
 const STATE_DIRNAME: &str = "unfk";
+const UNDO_FNAME: &str = "undo.json";
 
 /// Returns the OS-specific directory for storing unfk's state files.
 ///
@@ -26,6 +31,14 @@ pub fn state_dir(os: &str) -> Option<PathBuf> {
         "windows" => env::var_os("LOCALAPPDATA").map(|x| PathBuf::from(x).join(STATE_DIRNAME)),
         _ => None,
     }
+}
+
+pub fn save(undo_record: &UndoRecord, state_dir: &Path) -> io::Result<()> {
+    let serialized = serde_json::to_string_pretty(undo_record)?;
+    fs::create_dir_all(state_dir)?;
+    fs::write(state_dir.join(UNDO_FNAME), serialized)?;
+    // todo!("Figure out how to merge moves and folders jsons");
+    Ok(())
 }
 
 #[cfg(test)]
