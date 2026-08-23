@@ -44,7 +44,7 @@ fn format_stats_dry(grouping: &HashMap<String, Vec<path::PathBuf>>) -> String {
     let header = format!("Would move {} file(s):\n", total_n_files);
     res.push_str(&header);
     let mut sorted: Vec<_> = grouping.iter().collect();
-    sorted.sort_by_key(|(_, files)| std::cmp::Reverse(files.len()));
+    sorted.sort_by_key(|(k, files)| (std::cmp::Reverse(files.len()), *k));
 
     let rows: String = sorted
         .iter()
@@ -55,13 +55,12 @@ fn format_stats_dry(grouping: &HashMap<String, Vec<path::PathBuf>>) -> String {
     res
 }
 
-fn format_stats_actual(moves: &Vec<Result<MoveRecord, UnfkError>>) -> String {
+fn format_stats_actual(moves: &[Result<MoveRecord, UnfkError>]) -> String {
     let mut res = String::new();
     let total_n_files: usize = moves.iter().filter(|x| x.is_ok()).count();
 
     let header = format!("Moved {} file(s):\n", total_n_files);
 
-    // todo!("change the files count logic to make use of the actual moves");
     res.push_str(&header);
     let mut counts: HashMap<String, usize> = HashMap::new();
 
@@ -70,8 +69,7 @@ fn format_stats_actual(moves: &Vec<Result<MoveRecord, UnfkError>>) -> String {
     }
 
     let mut sorted: Vec<_> = counts.into_iter().collect();
-    sorted.sort_by_key(|(_, cnt)| std::cmp::Reverse(*cnt));
-    //
+    sorted.sort_by(|(k1, c1), (k2, c2)| c2.cmp(c1).then(k1.cmp(k2)));
     let rows: String = sorted
         .iter()
         .map(|(k, v)| format!("  {:<20} {:>3}", k, v))
@@ -187,37 +185,44 @@ mod tests {
     use super::*;
     use std::io;
 
+    fn ok_move(src: &str, cat: &str) -> Result<MoveRecord, UnfkError> {
+        let dst = src.replace("src", "dst");
+        let mv = Move {
+            src: PathBuf::from(src),
+            dst: PathBuf::from(dst),
+            category: String::from(cat),
+        };
+        Ok(MoveRecord { mv, identity: None })
+    }
+
+    fn fail_move(src: &str, cat: &str) -> Result<MoveRecord, UnfkError> {
+        let dst = src.replace("src", "dst");
+        let mv = Move {
+            src: PathBuf::from(src),
+            dst: PathBuf::from(dst),
+            category: String::from(cat),
+        };
+        let source = io::Error::new(io::ErrorKind::NotFound, "test_error");
+        Err(UnfkError::Move { mv, source })
+    }
+
     #[test]
-    fn test_format_stats_actual() {
+    fn format_stats_actual_shows_correct_counts() {
         let moves = vec![
-            Ok(MoveRecord {
-                mv: Move {
-                    src: PathBuf::from("/test_src"),
-                    dst: PathBuf::from("/test_dst"),
-                    category: String::from("test_category"),
-                },
-                identity: None,
-            }),
-            Ok(MoveRecord {
-                mv: Move {
-                    src: PathBuf::from("/test_src_2"),
-                    dst: PathBuf::from("/test_dst_2"),
-                    category: String::from("test_category_2"),
-                },
-                identity: None,
-            }),
-            Err(UnfkError::Move {
-                mv: Move {
-                    src: PathBuf::from("/test_src_3"),
-                    dst: PathBuf::from("/test_dst_3"),
-                    category: String::from("test_category_3"),
-                },
-                source: io::Error::new(io::ErrorKind::NotFound, "test_error"),
-            }),
+            ok_move("/doc1_src.pdf", "Documents"),
+            ok_move("/doc2_src.pdf", "Documents"),
+            ok_move("/book1_src.epub", "Books"),
+            fail_move("/book2_src.avi", "Books"),
+            fail_move("/movie1_src.avi", "Movies"),
         ];
         let stats = format_stats_actual(&moves);
-        let good_moves_cnt = moves.iter().filter(|x| x.is_ok()).count();
-        assert!(stats.starts_with(&format!("Moved {} file(s):", good_moves_cnt)));
+        let mut rows = stats.lines();
         println!("{stats}");
+        assert_eq!(rows.next(), Some("Moved 3 file(s):"));
+        let cols1: Vec<_> = rows.next().expect("row 1").split_whitespace().collect();
+        assert_eq!(cols1, ["Documents", "2"]);
+        let cols2: Vec<_> = rows.next().expect("row 2").split_whitespace().collect();
+        assert_eq!(cols2, ["Books", "1"]);
+        assert_eq!(rows.next(), None);
     }
 }
