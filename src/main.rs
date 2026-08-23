@@ -216,8 +216,8 @@ mod tests {
             }),
         ];
         let stats = format_stats_actual(&moves);
-        let good_moves: Vec<_> = moves.iter().filter_map(|x| x.as_ref().ok()).collect();
-        assert!(stats.starts_with(&format!("Moved {} file(s):", good_moves.len())));
+        let good_moves_cnt = moves.iter().filter(|x| x.is_ok()).count();
+        assert!(stats.starts_with(&format!("Moved {} file(s):", good_moves_cnt)));
         println!("{stats}");
     }
 }
