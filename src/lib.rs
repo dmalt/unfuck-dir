@@ -4,7 +4,9 @@ pub mod history;
 #[cfg(test)]
 mod temp_env;
 
+use core::fmt;
 use std::collections::HashMap;
+use std::io;
 use std::time::SystemTime;
 use std::{env, ffi, fs, path};
 
@@ -76,16 +78,55 @@ pub fn plan_folders(
     folders_to_create
 }
 
-pub fn create_folders(folders: &[path::PathBuf]) -> Vec<Result<(), String>> {
-    folders
-        .iter()
-        .map(|fp| fs::create_dir(fp).map_err(|e| format!("Failed to create {fp:?}: '{e}'")))
-        .collect()
+pub enum UnfkError {
+    Move {
+        mv: Move,
+        source: io::Error,
+    },
+    CreateFolder {
+        path: path::PathBuf,
+        source: io::Error,
+    },
 }
 
+impl UnfkError {
+    fn create_folder_failed(path: &path::Path, source: io::Error) -> Self {
+        Self::CreateFolder {
+            path: path.to_path_buf(),
+            source,
+        }
+    }
+
+    fn move_failed(mv: &Move, source: io::Error) -> Self {
+        Self::Move {
+            mv: mv.clone(),
+            source,
+        }
+    }
+}
+
+impl fmt::Display for UnfkError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Move { mv, source } => {
+                write!(f, "Failed to move {:?} to {:?}: {source}", mv.src, mv.dst)
+            }
+            Self::CreateFolder { path, source } => {
+                write!(f, "Failed to create {path:?}: {source}")
+            }
+        }
+    }
+}
+pub fn create_folder(folder: path::PathBuf) -> Result<path::PathBuf, UnfkError> {
+    fs::create_dir(&folder).map_err(|e| UnfkError::create_folder_failed(&folder, e))?;
+    Ok(folder)
+}
+
+#[derive(Clone)]
 pub struct Move {
     pub src: path::PathBuf,
     pub dst: path::PathBuf,
+    pub category: String,
 }
 
 pub struct FileIdentity {
@@ -132,28 +173,21 @@ pub fn plan_moves(
             moves.push(Move {
                 src: src.clone(),
                 dst,
+                category: dirname.clone(),
             });
         }
     }
     moves
 }
 
-pub fn perform_moves(moves: Vec<Move>) -> Vec<Result<MoveRecord, String>> {
-    let mut res = Vec::new();
-    for mv in moves.into_iter() {
-        if let Err(e) = fs::rename(&mv.src, &mv.dst) {
-            let err_str = format!("Failed to move '{:?}' to '{:?}': '{e}'", mv.src, mv.dst);
-            res.push(Err(err_str));
-            continue;
-        };
-        let fi = fs::metadata(&mv.dst).ok().map(|md| FileIdentity {
-            mtime: md.modified().ok(),
-            size_bytes: md.len(),
-        });
-        let move_record = MoveRecord { mv, identity: fi };
-        res.push(Ok(move_record))
-    }
-    res
+pub fn perform_move(mv: Move) -> Result<MoveRecord, UnfkError> {
+    fs::rename(&mv.src, &mv.dst).map_err(|e| UnfkError::move_failed(&mv, e))?;
+    let fi = fs::metadata(&mv.dst).ok().map(|md| FileIdentity {
+        mtime: md.modified().ok(),
+        size_bytes: md.len(),
+    });
+    let move_record = MoveRecord { mv, identity: fi };
+    Ok(move_record)
 }
 
 /// Expand '~' char to the value of the HOME env variable
@@ -192,4 +226,10 @@ mod tests {
         let res = rename_duplicate_stem("some_name__255");
         assert_eq!(res, "some_name__255__1");
     }
+
+    // #[test]
+    // fn format_mv_shortens_only_first_home_env_occurence() {
+    //     let from =
+    //     let res = format_mv(from, to);
+    // }
 }

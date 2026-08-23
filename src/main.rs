@@ -1,6 +1,7 @@
 use clap::{Parser, ValueEnum};
 use std::env::consts;
 use std::{collections::HashMap, fs, path, process};
+use unfk::{MoveRecord, UnfkError};
 
 #[derive(Parser)]
 #[command(name = "downloads-sorter")]
@@ -37,10 +38,10 @@ enum GroupMode {
     Date,
 }
 
-fn format_stats(grouping: &HashMap<String, Vec<path::PathBuf>>) -> String {
+fn format_stats_dry(grouping: &HashMap<String, Vec<path::PathBuf>>) -> String {
     let mut res = String::new();
     let total_n_files: usize = grouping.values().map(|v| v.len()).sum();
-    let header = format!("Moved {} files:\n", total_n_files);
+    let header = format!("Would move {} file(s):\n", total_n_files);
     res.push_str(&header);
     let mut sorted: Vec<_> = grouping.iter().collect();
     sorted.sort_by_key(|(_, files)| std::cmp::Reverse(files.len()));
@@ -48,6 +49,32 @@ fn format_stats(grouping: &HashMap<String, Vec<path::PathBuf>>) -> String {
     let rows: String = sorted
         .iter()
         .map(|(k, v)| format!("  {:<20} {:>3}", k, v.len()))
+        .collect::<Vec<_>>()
+        .join("\n");
+    res.push_str(&rows);
+    res
+}
+
+fn format_stats_actual(moves: &Vec<Result<MoveRecord, UnfkError>>) -> String {
+    let mut res = String::new();
+    let total_n_files: usize = moves.iter().filter(|x| x.is_ok()).count();
+
+    let header = format!("Moved {} file(s):\n", total_n_files);
+
+    // todo!("change the files count logic to make use of the actual moves");
+    res.push_str(&header);
+    let mut counts: HashMap<String, usize> = HashMap::new();
+
+    for rec in moves.iter().filter_map(|m| m.as_ref().ok()) {
+        *counts.entry(rec.mv.category.clone()).or_default() += 1;
+    }
+
+    let mut sorted: Vec<_> = counts.into_iter().collect();
+    sorted.sort_by_key(|(_, cnt)| std::cmp::Reverse(*cnt));
+    //
+    let rows: String = sorted
+        .iter()
+        .map(|(k, v)| format!("  {:<20} {:>3}", k, v))
         .collect::<Vec<_>>()
         .join("\n");
     res.push_str(&rows);
@@ -104,15 +131,13 @@ fn main() {
         process::exit(1);
     };
     let files_grouping = group_files(&path, args.include_dotfiles, args.by);
-    let stats = format_stats(&files_grouping);
     if args.dry {
-        eprintln!("[DRY RUN]\n");
+        eprintln!("DRY RUN\n");
     }
     let folders_to_create = unfk::plan_folders(&files_grouping, &path);
     let moves = unfk::plan_moves(&files_grouping, &path);
 
-    todo!("Move the code below to reflect the actual performed moves");
-    if args.dry || args.verbose {
+    if args.verbose {
         for f in &folders_to_create {
             println!("[mkdir] {f:?}");
         }
@@ -125,13 +150,19 @@ fn main() {
         }
     }
 
-    unfk::history::state_dir(consts::OS);
+    let stats;
+    if args.dry {
+        stats = format_stats_dry(&files_grouping);
+    } else {
+        let _state_dir = unfk::history::state_dir(consts::OS);
+        let folder_results: Vec<_> = folders_to_create
+            .into_iter()
+            .map(unfk::create_folder)
+            .collect();
+        let move_results: Vec<_> = moves.into_iter().map(unfk::perform_move).collect();
+        stats = format_stats_actual(&move_results);
 
-    if !args.dry {
-        let folder_results = unfk::create_folders(&folders_to_create);
-        let move_results = unfk::perform_moves(moves);
-
-        let errors: Vec<&String> = folder_results
+        let errors: Vec<&UnfkError> = folder_results
             .iter()
             .filter_map(|r| r.as_ref().err())
             .chain(move_results.iter().filter_map(|r| r.as_ref().err()))
@@ -145,4 +176,48 @@ fn main() {
     }
 
     eprintln!("\n{}", stats);
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use unfk::Move;
+
+    use super::*;
+    use std::io;
+
+    #[test]
+    fn test_format_stats_actual() {
+        let moves = vec![
+            Ok(MoveRecord {
+                mv: Move {
+                    src: PathBuf::from("/test_src"),
+                    dst: PathBuf::from("/test_dst"),
+                    category: String::from("test_category"),
+                },
+                identity: None,
+            }),
+            Ok(MoveRecord {
+                mv: Move {
+                    src: PathBuf::from("/test_src_2"),
+                    dst: PathBuf::from("/test_dst_2"),
+                    category: String::from("test_category_2"),
+                },
+                identity: None,
+            }),
+            Err(UnfkError::Move {
+                mv: Move {
+                    src: PathBuf::from("/test_src_3"),
+                    dst: PathBuf::from("/test_dst_3"),
+                    category: String::from("test_category_3"),
+                },
+                source: io::Error::new(io::ErrorKind::NotFound, "test_error"),
+            }),
+        ];
+        let stats = format_stats_actual(&moves);
+        let good_moves: Vec<_> = moves.iter().filter_map(|x| x.as_ref().ok()).collect();
+        assert!(stats.starts_with(&format!("Moved {} file(s):", good_moves.len())));
+        println!("{stats}");
+    }
 }
