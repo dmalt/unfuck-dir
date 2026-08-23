@@ -80,6 +80,7 @@ pub fn plan_folders(
     folders_to_create
 }
 
+#[derive(Debug)]
 pub enum UnfkError {
     Move {
         mv: Move,
@@ -124,26 +125,26 @@ pub fn create_folder(folder: path::PathBuf) -> Result<path::PathBuf, UnfkError> 
     Ok(folder)
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub struct Move {
     pub src: path::PathBuf,
     pub dst: path::PathBuf,
     pub category: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct FileIdentity {
     pub mtime: Option<SystemTime>,
     pub size_bytes: u64,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct MoveRecord {
     pub mv: Move,
     pub identity: Option<FileIdentity>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct UndoRecord {
     pub moves: Vec<MoveRecord>,
     pub folders: Vec<path::PathBuf>,

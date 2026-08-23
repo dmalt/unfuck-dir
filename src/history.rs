@@ -37,16 +37,29 @@ pub fn save(undo_record: &UndoRecord, state_dir: &Path) -> io::Result<()> {
     let serialized = serde_json::to_string_pretty(undo_record)?;
     fs::create_dir_all(state_dir)?;
     fs::write(state_dir.join(UNDO_FNAME), serialized)?;
-    // todo!("Figure out how to merge moves and folders jsons");
     Ok(())
+}
+
+pub fn load(state_dir: &Path) -> io::Result<UndoRecord> {
+    let fp = state_dir.join(UNDO_FNAME);
+    let contents = fs::read_to_string(fp)?;
+    let undo_record = serde_json::from_str(&contents)?;
+    Ok(undo_record)
 }
 
 #[cfg(test)]
 mod tests {
 
+    use std::time::{Duration, SystemTime};
+
+    use tempfile::tempdir;
+
     use super::*;
 
-    use crate::temp_env::{with_var, with_vars};
+    use crate::{
+        FileIdentity, Move, MoveRecord,
+        temp_env::{with_var, with_vars},
+    };
 
     #[test]
     fn unknown_os_returns_none() {
@@ -119,5 +132,41 @@ mod tests {
         with_var("LOCALAPPDATA", None, || {
             assert_eq!(state_dir("windows"), None)
         });
+    }
+
+    fn sample_move(src: &str, cat: &str, identity: Option<FileIdentity>) -> MoveRecord {
+        let dst = src.replace("src", "dst");
+        let mv = Move {
+            src: PathBuf::from(src),
+            dst: PathBuf::from(dst),
+            category: String::from(cat),
+        };
+        MoveRecord { mv, identity }
+    }
+
+    #[test]
+    fn save_load_roundtrip() {
+        let mtime = Some(SystemTime::UNIX_EPOCH + Duration::new(1_700_000_000, 12_456_789));
+        let id1 = Some(FileIdentity {
+            mtime,
+            size_bytes: 4096,
+        });
+        let id2 = Some(FileIdentity {
+            mtime: None,
+            size_bytes: 128,
+        });
+        let undo_record_orig = UndoRecord {
+            moves: vec![
+                sample_move("doc1_src.pdf", "Documents", id1),
+                sample_move("doc2_src.pdf", "Documents", id2),
+                sample_move("doc3_src.pdf", "Documents", None),
+            ],
+            folders: vec![PathBuf::from("./Documents")],
+        };
+        let temp_state_dir = tempdir().unwrap();
+        save(&undo_record_orig, temp_state_dir.path()).unwrap();
+
+        let undo_record_loaded = load(temp_state_dir.path()).unwrap();
+        assert_eq!(undo_record_orig, undo_record_loaded);
     }
 }
