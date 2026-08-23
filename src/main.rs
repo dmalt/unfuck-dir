@@ -1,5 +1,7 @@
 use clap::{Parser, ValueEnum};
 use std::env::consts;
+use std::fmt::Write;
+use std::path::PathBuf;
 use std::{collections::HashMap, fs, path, process};
 use unfk::{MoveRecord, UnfkError};
 
@@ -38,44 +40,49 @@ enum GroupMode {
     Date,
 }
 
-fn format_stats_dry(grouping: &HashMap<String, Vec<path::PathBuf>>) -> String {
+fn report_dry(grouping: &HashMap<String, Vec<path::PathBuf>>) -> String {
     let mut res = String::new();
-    let total_n_files: usize = grouping.values().map(|v| v.len()).sum();
-    let header = format!("Would move {} file(s):\n", total_n_files);
-    res.push_str(&header);
+    let n: usize = grouping.values().map(|v| v.len()).sum();
+    writeln!(res, "Would move {n} file(s):").expect("writing to a String cannot fail");
     let mut sorted: Vec<_> = grouping.iter().collect();
     sorted.sort_by_key(|(k, files)| (std::cmp::Reverse(files.len()), *k));
 
-    let rows: String = sorted
-        .iter()
-        .map(|(k, v)| format!("  {:<20} {:>3}", k, v.len()))
-        .collect::<Vec<_>>()
-        .join("\n");
-    res.push_str(&rows);
+    for (k, files) in sorted.iter() {
+        let v = files.len();
+        writeln!(res, "  {k:<20} {v:>3}").expect("writing to a String cannot fail");
+    }
     res
 }
 
-fn format_stats_actual(moves: &[Result<MoveRecord, UnfkError>]) -> String {
+fn report_actual(
+    moves: &[Result<MoveRecord, UnfkError>],
+    folders: &[Result<PathBuf, UnfkError>],
+) -> String {
     let mut res = String::new();
-    let total_n_files: usize = moves.iter().filter(|x| x.is_ok()).count();
+    let n = moves.iter().filter(|x| x.is_ok()).count();
+    writeln!(res, "Moved {n} file(s):").expect("writing to a String cannot fail");
 
-    let header = format!("Moved {} file(s):\n", total_n_files);
-
-    res.push_str(&header);
     let mut counts: HashMap<String, usize> = HashMap::new();
-
     for rec in moves.iter().filter_map(|m| m.as_ref().ok()) {
         *counts.entry(rec.mv.category.clone()).or_default() += 1;
     }
 
     let mut sorted: Vec<_> = counts.into_iter().collect();
     sorted.sort_by(|(k1, c1), (k2, c2)| c2.cmp(c1).then(k1.cmp(k2)));
-    let rows: String = sorted
+    for (k, v) in sorted.iter() {
+        writeln!(res, "  {k:<20} {v:>3}").expect("writing to a String cannot fail");
+    }
+    let errors: Vec<&UnfkError> = folders
         .iter()
-        .map(|(k, v)| format!("  {:<20} {:>3}", k, v))
-        .collect::<Vec<_>>()
-        .join("\n");
-    res.push_str(&rows);
+        .filter_map(|r| r.as_ref().err())
+        .chain(moves.iter().filter_map(|r| r.as_ref().err()))
+        .collect();
+    if !errors.is_empty() {
+        writeln!(res, "\nERRORS:").expect("writing to a String cannot fail");
+        for e in errors {
+            writeln!(res, "{e}").expect("writing to a String cannot fail");
+        }
+    }
     res
 }
 
@@ -132,48 +139,32 @@ fn main() {
     if args.dry {
         eprintln!("DRY RUN\n");
     }
-    let folders_to_create = unfk::plan_folders(&files_grouping, &path);
-    let moves = unfk::plan_moves(&files_grouping, &path);
+    let folders_plan = unfk::plan_folders(&files_grouping, &path);
+    let moves_plan = unfk::plan_moves(&files_grouping, &path);
 
     if args.verbose {
-        for f in &folders_to_create {
+        for f in &folders_plan {
             println!("[mkdir] {f:?}");
         }
-        if !folders_to_create.is_empty() {
+        if !folders_plan.is_empty() {
             println!();
         }
 
-        for mv in &moves {
+        for mv in &moves_plan {
             println!("{}", unfk::format_mv(&mv.src, &mv.dst));
         }
     }
 
-    let stats;
-    if args.dry {
-        stats = format_stats_dry(&files_grouping);
+    let stats = if args.dry {
+        report_dry(&files_grouping)
     } else {
         let _state_dir = unfk::history::state_dir(consts::OS);
-        let folder_results: Vec<_> = folders_to_create
-            .into_iter()
-            .map(unfk::create_folder)
-            .collect();
-        let move_results: Vec<_> = moves.into_iter().map(unfk::perform_move).collect();
-        stats = format_stats_actual(&move_results);
+        let folder_results: Vec<_> = folders_plan.into_iter().map(unfk::create_folder).collect();
+        let move_results: Vec<_> = moves_plan.into_iter().map(unfk::perform_move).collect();
+        report_actual(&move_results, &folder_results)
+    };
 
-        let errors: Vec<&UnfkError> = folder_results
-            .iter()
-            .filter_map(|r| r.as_ref().err())
-            .chain(move_results.iter().filter_map(|r| r.as_ref().err()))
-            .collect();
-        if !errors.is_empty() {
-            eprintln!("\nERRORS WHILE MOVING FILES");
-            for e in errors {
-                eprintln!("{e}");
-            }
-        }
-    }
-
-    eprintln!("\n{}", stats);
+    eprintln!("{stats}");
 }
 
 #[cfg(test)]
@@ -207,7 +198,7 @@ mod tests {
     }
 
     #[test]
-    fn format_stats_actual_shows_correct_counts() {
+    fn report_actual_shows_correct_counts_and_errors() {
         let moves = vec![
             ok_move("/doc1_src.pdf", "Documents"),
             ok_move("/doc2_src.pdf", "Documents"),
@@ -215,7 +206,12 @@ mod tests {
             fail_move("/book2_src.avi", "Books"),
             fail_move("/movie1_src.avi", "Movies"),
         ];
-        let stats = format_stats_actual(&moves);
+        let folders = vec![
+            Ok(PathBuf::from("./Documents")),
+            Ok(PathBuf::from("./Books")),
+            Ok(PathBuf::from("./Movies")),
+        ];
+        let stats = report_actual(&moves, &folders);
         let mut rows = stats.lines();
         println!("{stats}");
         assert_eq!(rows.next(), Some("Moved 3 file(s):"));
@@ -223,6 +219,11 @@ mod tests {
         assert_eq!(cols1, ["Documents", "2"]);
         let cols2: Vec<_> = rows.next().expect("row 2").split_whitespace().collect();
         assert_eq!(cols2, ["Books", "1"]);
+        assert_eq!(rows.next(), Some(""));
+
+        assert!(rows.next().unwrap().contains("ERRORS"));
+        assert!(rows.next().unwrap().contains("book2_src.avi"));
+        assert!(rows.next().unwrap().contains("movie1_src.avi"));
         assert_eq!(rows.next(), None);
     }
 }
