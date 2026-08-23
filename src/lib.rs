@@ -10,6 +10,8 @@ use std::io;
 use std::time::SystemTime;
 use std::{env, ffi, fs, path};
 
+use serde::{Deserialize, Serialize};
+
 /// Separator used between filename and duplicate number (e.g., "file__1.txt")
 const DUPLICATE_DELIMETER: &str = "__";
 /// Separator used when showing source and destination paths for the moves
@@ -122,18 +124,20 @@ pub fn create_folder(folder: path::PathBuf) -> Result<path::PathBuf, UnfkError> 
     Ok(folder)
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Move {
     pub src: path::PathBuf,
     pub dst: path::PathBuf,
     pub category: String,
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct FileIdentity {
     pub mtime: Option<SystemTime>,
     pub size_bytes: u64,
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct MoveRecord {
     pub mv: Move,
     pub identity: Option<FileIdentity>,
