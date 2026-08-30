@@ -258,6 +258,8 @@ pub fn maybe_expand_tilde(path: &str) -> Result<path::PathBuf, env::VarError> {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
 
     #[test]
@@ -282,6 +284,52 @@ mod tests {
     fn rename_duplicate_stem_max_duplicate() {
         let res = rename_duplicate_stem("some_name__255");
         assert_eq!(res, "some_name__255__1");
+    }
+
+    fn id(size_bytes: u64, mtime: Option<SystemTime>) -> FileIdentity {
+        FileIdentity { size_bytes, mtime }
+    }
+
+    #[test]
+    fn identity_matches_mismatched_sizes_are_rejected() {
+        let t1 = SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        let t2 = SystemTime::UNIX_EPOCH + Duration::from_secs(1_800_000_000);
+
+        #[rustfmt::skip]
+        let cases = [
+            ("both missing",         None,     None    ),
+            ("stored missing",       None,     Some(t1)),
+            ("actual missing",       Some(t1), None    ),
+            ("both present, equal",  Some(t1), Some(t1)),
+            ("both present, differ", Some(t1), Some(t2)),
+        ];
+
+        for (name, stored_mtime, actual_mtime) in cases {
+            let stored = id(1234, stored_mtime);
+            let actual = id(5678, actual_mtime);
+            assert!(!identity_matches(&stored, &actual), "case: {name}");
+        }
+    }
+
+    #[test]
+    fn identity_matches_mtime_comparison_at_equal_sizes() {
+        let t1 = SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        let t2 = SystemTime::UNIX_EPOCH + Duration::from_secs(1_800_000_000);
+
+        #[rustfmt::skip]
+        let cases = [
+            ("both missing",         None,     None,     true),
+            ("stored missing",       None,     Some(t1), true),
+            ("actual missing",       Some(t1), None,     true),
+            ("both present, equal",  Some(t1), Some(t1), true),
+            ("both present, differ", Some(t1), Some(t2), false),
+        ];
+
+        for (name, stored_mtime, actual_mtime, expected) in cases {
+            let stored = id(4096, stored_mtime);
+            let actual = id(4096, actual_mtime);
+            assert_eq!(identity_matches(&stored, &actual), expected, "case: {name}");
+        }
     }
 
     // #[test]
