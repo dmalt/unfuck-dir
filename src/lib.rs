@@ -358,6 +358,20 @@ mod tests {
         assert_eq!(fs::read(&rec.mv.src).unwrap(), b"hello world");
     }
 
+    #[test]
+    fn undo_move_skips_destination_missing() {
+        let tmp = tempdir().unwrap();
+        let rec = setup_moved_file(tmp.path());
+        fs::remove_file(&rec.mv.dst).unwrap();
+
+        let res = undo_move(&rec);
+
+        assert!(
+            matches!(res, Err(SkipReason::DestinationMissing)),
+            "expected DestinationMissing, got {res:?}"
+        );
+    }
+
     // #[test]
     // fn format_mv_shortens_only_first_home_env_occurence() {
     //     let from =
