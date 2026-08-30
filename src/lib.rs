@@ -338,8 +338,9 @@ mod tests {
         let category = String::from("Documents");
         let src = dir.join("a.pdf");
         fs::write(&src, b"hello world").unwrap();
-        fs::create_dir(dir.join(&category)).unwrap();
-        let dst = dir.join("Documents").join("a.pdf");
+        let cat_dir = dir.join(&category);
+        fs::create_dir(&cat_dir).unwrap();
+        let dst = cat_dir.join("a.pdf");
         let mv = Move { src, dst, category };
         perform_move(mv).unwrap()
     }
@@ -369,6 +370,10 @@ mod tests {
         assert!(
             matches!(res, Err(SkipReason::DestinationMissing)),
             "expected DestinationMissing, got {res:?}"
+        );
+        assert!(
+            !rec.mv.src.exists(),
+            "the source shouldn't reappear after the failed undo"
         );
     }
 
