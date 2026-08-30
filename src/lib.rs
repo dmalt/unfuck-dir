@@ -377,6 +377,27 @@ mod tests {
         );
     }
 
+    #[test]
+    fn undo_move_skips_existing_source() {
+        let tmp = tempdir().unwrap();
+        let rec = setup_moved_file(tmp.path());
+        let cont = b"goodbye world";
+        fs::write(&rec.mv.src, cont).unwrap();
+
+        let res = undo_move(&rec);
+
+        assert!(
+            matches!(res, Err(SkipReason::SourceOccupied)),
+            "expected SourceOccupied, got {res:?}"
+        );
+        assert!(
+            rec.mv.dst.exists(),
+            "the destination file shouldn't be moved after the failed undo"
+        );
+        let cont_after = fs::read(&rec.mv.src).unwrap();
+        assert_eq!(cont_after, cont, "the source file should stay unchanged");
+    }
+
     // #[test]
     // fn format_mv_shortens_only_first_home_env_occurence() {
     //     let from =
