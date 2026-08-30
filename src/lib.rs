@@ -120,6 +120,7 @@ impl fmt::Display for UnfkError {
         }
     }
 }
+
 pub fn create_folder(folder: path::PathBuf) -> Result<path::PathBuf, UnfkError> {
     fs::create_dir(&folder).map_err(|e| UnfkError::create_folder_failed(&folder, e))?;
     Ok(folder)
@@ -211,6 +212,17 @@ pub enum SkipReason {
     DestinationMissing,
     IdentityMismatch,
     MoveFailure(io::Error),
+}
+
+impl fmt::Display for SkipReason {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::SourceOccupied => f.write_str("something is already at the original location"),
+            Self::DestinationMissing => f.write_str("the file is no longer there"),
+            Self::IdentityMismatch => f.write_str("the file has changed since it was moved"),
+            Self::MoveFailure(e) => write!(f, "could not move it back: {e}"),
+        }
+    }
 }
 
 fn identity_matches(stored: &FileIdentity, actual: &FileIdentity) -> bool {
