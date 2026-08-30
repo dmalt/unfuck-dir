@@ -27,12 +27,15 @@ struct Args {
     verbose: bool,
 
     /// Just show the current file extension groups that are used with by="type" and exit
-    #[arg(short, long)]
+    #[arg(short, long, conflicts_with_all = ["path", "by", "include_dotfiles"])]
     show_categories: bool,
 
     /// Include the dotfiles
     #[arg(short = 'i', long)]
     include_dotfiles: bool, // TODO: think of a better short flag. -i is confusing
+
+    #[arg(long, conflicts_with_all = ["path", "by", "include_dotfiles", "show_categories"])]
+    undo: bool,
 }
 
 #[derive(Clone, ValueEnum)]
