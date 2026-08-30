@@ -381,8 +381,8 @@ mod tests {
     fn undo_move_skips_existing_source() {
         let tmp = tempdir().unwrap();
         let rec = setup_moved_file(tmp.path());
-        let cont = b"goodbye world";
-        fs::write(&rec.mv.src, cont).unwrap();
+        let content_before = b"goodbye world";
+        fs::write(&rec.mv.src, content_before).unwrap();
 
         let res = undo_move(&rec);
 
@@ -395,7 +395,48 @@ mod tests {
             "the destination file shouldn't be moved after the failed undo"
         );
         let cont_after = fs::read(&rec.mv.src).unwrap();
-        assert_eq!(cont_after, cont, "the source file should stay unchanged");
+        assert_eq!(
+            cont_after, content_before,
+            "the source file should stay unchanged"
+        );
+    }
+
+    #[test]
+    fn undo_move_skips_on_identity_mismatch() {
+        let tmp = tempdir().unwrap();
+        let rec = setup_moved_file(tmp.path());
+        let content_before = b"goodbye world";
+        fs::write(&rec.mv.dst, content_before).unwrap();
+
+        let res = undo_move(&rec);
+
+        assert!(
+            matches!(res, Err(SkipReason::IdentityMismatch)),
+            "expected IdentityMismatch, got {res:?}"
+        );
+        assert!(
+            rec.mv.dst.exists(),
+            "the destination file shouldn't be moved after the failed undo"
+        );
+        assert!(
+            !rec.mv.src.exists(),
+            "the source shouldn't reappear after the failed undo"
+        );
+    }
+
+    #[test]
+    fn undo_move_proceeds_when_identity_is_not_recorded() {
+        let tmp = tempdir().unwrap();
+        let mut rec = setup_moved_file(tmp.path());
+        rec.identity = None;
+        let content_before = b"goodbye world";
+        fs::write(&rec.mv.dst, content_before).unwrap();
+
+        undo_move(&rec).unwrap();
+
+        assert!(!rec.mv.dst.exists());
+        assert!(rec.mv.src.exists());
+        assert_eq!(fs::read(&rec.mv.src).unwrap(), content_before);
     }
 
     // #[test]
