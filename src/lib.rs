@@ -258,7 +258,9 @@ pub fn maybe_expand_tilde(path: &str) -> Result<path::PathBuf, env::VarError> {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
+    use std::{path::Path, time::Duration};
+
+    use tempfile::tempdir;
 
     use super::*;
 
@@ -330,6 +332,30 @@ mod tests {
             let actual = id(4096, actual_mtime);
             assert_eq!(identity_matches(&stored, &actual), expected, "case: {name}");
         }
+    }
+
+    fn setup_moved_file(dir: &Path) -> MoveRecord {
+        let category = String::from("Documents");
+        let src = dir.join("a.pdf");
+        fs::write(&src, b"hello world").unwrap();
+        fs::create_dir(dir.join(&category)).unwrap();
+        let dst = dir.join("Documents").join("a.pdf");
+        let mv = Move { src, dst, category };
+        perform_move(mv).unwrap()
+    }
+
+    #[test]
+    fn undo_move_happy_path() {
+        let tmp = tempdir().unwrap();
+        let rec = setup_moved_file(tmp.path());
+
+        assert!(rec.mv.dst.exists());
+        assert!(!rec.mv.src.exists());
+        undo_move(&rec).unwrap();
+
+        assert!(!rec.mv.dst.exists());
+        assert!(rec.mv.src.exists());
+        assert_eq!(fs::read(&rec.mv.src).unwrap(), b"hello world");
     }
 
     // #[test]
