@@ -191,14 +191,60 @@ pub fn plan_moves(
     moves
 }
 
-pub fn perform_move(mv: Move) -> Result<MoveRecord, UnfkError> {
-    fs::rename(&mv.src, &mv.dst).map_err(|e| UnfkError::move_failed(&mv, e))?;
-    let fi = fs::metadata(&mv.dst).ok().map(|md| FileIdentity {
+fn read_identity(p: &path::Path) -> Option<FileIdentity> {
+    fs::metadata(p).ok().map(|md| FileIdentity {
         mtime: md.modified().ok(),
         size_bytes: md.len(),
-    });
+    })
+}
+
+pub fn perform_move(mv: Move) -> Result<MoveRecord, UnfkError> {
+    fs::rename(&mv.src, &mv.dst).map_err(|e| UnfkError::move_failed(&mv, e))?;
+    let fi = read_identity(&mv.dst);
     let move_record = MoveRecord { mv, identity: fi };
     Ok(move_record)
+}
+
+#[derive(Debug)]
+pub enum SkipReason {
+    SourceOccupied,
+    DestinationMissing,
+    IdentityMismatch,
+    MoveFailure(io::Error),
+}
+
+fn identity_matches(stored: &FileIdentity, actual: &FileIdentity) -> bool {
+    if stored.size_bytes != actual.size_bytes {
+        return false;
+    }
+    if let Some(smt) = stored.mtime
+        && let Some(amt) = actual.mtime
+        && smt != amt
+    {
+        return false;
+    }
+
+    true
+}
+
+pub fn undo_move(rec: &MoveRecord) -> Result<(), SkipReason> {
+    if !rec.mv.dst.exists() {
+        return Err(SkipReason::DestinationMissing);
+    }
+
+    if rec.mv.src.exists() {
+        return Err(SkipReason::SourceOccupied);
+    }
+
+    let dst_fi = read_identity(&rec.mv.dst);
+    if let Some(actual_fi) = &dst_fi
+        && let Some(stored_fi) = &rec.identity
+        && !identity_matches(stored_fi, actual_fi)
+    {
+        return Err(SkipReason::IdentityMismatch);
+    }
+
+    fs::rename(&rec.mv.dst, &rec.mv.src).map_err(SkipReason::MoveFailure)
 }
 
 /// Expand '~' char to the value of the HOME env variable
