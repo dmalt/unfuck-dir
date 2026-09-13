@@ -1,6 +1,7 @@
 use std::env;
 use std::fs;
 use std::io;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 use crate::UndoRecord;
@@ -45,6 +46,15 @@ pub fn load(state_dir: &Path) -> io::Result<UndoRecord> {
     let contents = fs::read_to_string(fp)?;
     let undo_record = serde_json::from_str(&contents)?;
     Ok(undo_record)
+}
+
+pub fn clear(state_dir: &Path) -> io::Result<()> {
+    let undo_file = state_dir.join(UNDO_FNAME);
+    match fs::remove_file(undo_file) {
+        Ok(_) => Ok(()),
+        Err(e) if e.kind() == ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e),
+    }
 }
 
 #[cfg(test)]
@@ -168,5 +178,30 @@ mod tests {
 
         let undo_record_loaded = load(temp_state_dir.path()).unwrap();
         assert_eq!(undo_record_orig, undo_record_loaded);
+    }
+
+    mod clear {
+
+        use std::fs;
+        use tempfile::tempdir;
+
+        use crate::history::{UNDO_FNAME, clear};
+
+        #[test]
+        fn returns_ok_on_missing() {
+            let state_dir = tempdir().unwrap();
+            assert!(clear(state_dir.path()).is_ok())
+        }
+
+        #[test]
+        fn removes_existing_undo_file() {
+            let state_dir = tempdir().unwrap();
+            fs::write(state_dir.path(), "{}").unwrap();
+
+            assert!(state_dir.path().join(UNDO_FNAME).exists());
+            clear(state_dir.path()).unwrap();
+
+            assert!(!state_dir.path().join(UNDO_FNAME).exists());
+        }
     }
 }
