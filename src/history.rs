@@ -59,7 +59,6 @@ pub fn clear(state_dir: &Path) -> io::Result<()> {
 
 #[cfg(test)]
 mod tests {
-
     use std::time::{Duration, SystemTime};
 
     use tempfile::tempdir;
@@ -181,7 +180,6 @@ mod tests {
     }
 
     mod clear {
-
         use std::fs;
         use tempfile::tempdir;
 
