@@ -194,12 +194,13 @@ mod tests {
         #[test]
         fn removes_existing_undo_file() {
             let state_dir = tempdir().unwrap();
-            fs::write(state_dir.path(), "{}").unwrap();
+            let undo_path = state_dir.path().join(UNDO_FNAME);
+            fs::write(&undo_path, "{}").unwrap();
 
-            assert!(state_dir.path().join(UNDO_FNAME).exists());
+            assert!(undo_path.exists());
             clear(state_dir.path()).unwrap();
 
-            assert!(!state_dir.path().join(UNDO_FNAME).exists());
+            assert!(!undo_path.exists());
         }
     }
 }
