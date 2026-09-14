@@ -369,7 +369,7 @@ mod tests {
         let cat_dir = dir.join(&category);
         fs::create_dir(&cat_dir).unwrap();
         let dst = cat_dir.join("a.pdf");
-        let mv = Move{ src, dst, category };
+        let mv = Move { src, dst, category };
         perform_move(mv).unwrap()
     }
 
@@ -453,6 +453,8 @@ mod tests {
 
         use super::setup_moved_file;
         use crate::{SkipReason, undo_move};
+
+        #[cfg(unix)]
         use std::os::unix::fs::PermissionsExt;
 
         #[test]
@@ -478,7 +480,7 @@ mod tests {
 
             let res = undo_move(&rec);
 
-            assert!(res.is_err(), "Should produce 'SourceOccupied', got {res:?}");
+            assert!(res.is_err(), "Should produce error, got {res:?}");
             assert!(
                 rec.mv.dst.exists(),
                 "the destination file shouldn't be moved after the failed undo"
@@ -490,6 +492,7 @@ mod tests {
             );
         }
 
+        #[cfg(unix)]
         #[test]
         fn produces_move_failure_when_cant_perform_move() {
             let tmp = tempdir().unwrap();
