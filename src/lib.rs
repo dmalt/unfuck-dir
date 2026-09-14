@@ -70,9 +70,6 @@ pub fn plan_folders(
     let mut folder_path;
     let mut folders_to_create: Vec<path::PathBuf> = Vec::new();
     for dirname in files_grouping.keys() {
-        if dirname == "Folders" {
-            continue;
-        }
         folder_path = folder_to_organize.join(dirname);
 
         if !folder_path.exists() {
@@ -174,9 +171,6 @@ pub fn plan_moves(
     let mut folder_path;
     let mut moves: Vec<Move> = Vec::new();
     for (dirname, group_files) in files_grouping {
-        if dirname == "Folders" {
-            continue;
-        }
         folder_path = folder_to_organize.join(dirname);
 
         for src in group_files {
@@ -278,7 +272,7 @@ pub fn maybe_expand_tilde(path: &str) -> Result<path::PathBuf, env::VarError> {
 mod tests {
     use std::{fs, path::Path};
 
-    use crate::{Move, CompletedMove, perform_move};
+    use crate::{CompletedMove, Move, perform_move};
 
     // use super::*;
 

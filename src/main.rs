@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::{collections::HashMap, fs, path, process};
 use unfk::history::{clear, save};
-use unfk::{Move, CompletedMove, PendingUndo, UnfkError, check_undo, undo_move};
+use unfk::{CompletedMove, Move, PendingUndo, UnfkError, check_undo, undo_move};
 
 #[derive(Parser)]
 #[command(name = "downloads-sorter")]
@@ -44,52 +44,6 @@ struct Args {
 enum GroupMode {
     Type,
     Date,
-}
-
-fn report_dry(grouping: &HashMap<String, Vec<path::PathBuf>>) -> String {
-    let mut res = String::new();
-    let n: usize = grouping.values().map(|v| v.len()).sum();
-    writeln!(res, "Would move {n} file(s):").expect("writing to a String cannot fail");
-    let mut sorted: Vec<_> = grouping.iter().collect();
-    sorted.sort_by_key(|(k, files)| (std::cmp::Reverse(files.len()), *k));
-
-    for (k, files) in sorted.iter() {
-        let v = files.len();
-        writeln!(res, "  {k:<20} {v:>3}").expect("writing to a String cannot fail");
-    }
-    res
-}
-
-fn report_actual(
-    moves: &[Result<CompletedMove, UnfkError>],
-    folders: &[Result<PathBuf, UnfkError>],
-) -> String {
-    let mut res = String::new();
-    let n = moves.iter().filter(|x| x.is_ok()).count();
-    writeln!(res, "Moved {n} file(s):").expect("writing to a String cannot fail");
-
-    let mut counts: HashMap<String, usize> = HashMap::new();
-    for rec in moves.iter().filter_map(|m| m.as_ref().ok()) {
-        *counts.entry(rec.mv.category.clone()).or_default() += 1;
-    }
-
-    let mut sorted: Vec<_> = counts.into_iter().collect();
-    sorted.sort_by(|(k1, c1), (k2, c2)| c2.cmp(c1).then(k1.cmp(k2)));
-    for (k, v) in sorted.iter() {
-        writeln!(res, "  {k:<20} {v:>3}").expect("writing to a String cannot fail");
-    }
-    let errors: Vec<&UnfkError> = folders
-        .iter()
-        .filter_map(|r| r.as_ref().err())
-        .chain(moves.iter().filter_map(|r| r.as_ref().err()))
-        .collect();
-    if !errors.is_empty() {
-        writeln!(res, "\nERRORS:").expect("writing to a String cannot fail");
-        for e in errors {
-            writeln!(res, "{e}").expect("writing to a String cannot fail");
-        }
-    }
-    res
 }
 
 fn is_dotfile(entry: &fs::DirEntry) -> bool {
@@ -197,9 +151,53 @@ fn undo(dry: bool) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+struct RunOutcome {
+    moves: Vec<Result<CompletedMove, UnfkError>>,
+    folders: Vec<Result<PathBuf, UnfkError>>,
+}
+
+impl RunOutcome {
+    pub fn report(&self) -> String {
+        let mut res = String::new();
+        let n = self.moves.iter().filter(|x| x.is_ok()).count();
+        writeln!(res, "Moved {n} file(s):").expect("writing to a String cannot fail");
+
+        let mut counts: HashMap<String, usize> = HashMap::new();
+        for rec in self.moves.iter().filter_map(|m| m.as_ref().ok()) {
+            *counts.entry(rec.mv.category.clone()).or_default() += 1;
+        }
+
+        let mut sorted: Vec<_> = counts.into_iter().collect();
+        sorted.sort_by(|(k1, c1), (k2, c2)| c2.cmp(c1).then(k1.cmp(k2)));
+        for (k, v) in sorted.iter() {
+            writeln!(res, "  {k:<20} {v:>3}").expect("writing to a String cannot fail");
+        }
+        let errors: Vec<&UnfkError> = self
+            .folders
+            .iter()
+            .filter_map(|r| r.as_ref().err())
+            .chain(self.moves.iter().filter_map(|r| r.as_ref().err()))
+            .collect();
+        if !errors.is_empty() {
+            writeln!(res, "\nERRORS:").expect("writing to a String cannot fail");
+            for e in errors {
+                writeln!(res, "{e}").expect("writing to a String cannot fail");
+            }
+        }
+        res
+    }
+
+    pub fn pending_undo(self) -> PendingUndo {
+        PendingUndo {
+            moves: self.moves.into_iter().filter_map(Result::ok).collect(),
+            folders: self.folders.into_iter().filter_map(Result::ok).collect(),
+        }
+    }
+}
+
 struct Plan {
-    folders: Vec<PathBuf>,
     moves: Vec<Move>,
+    folders: Vec<PathBuf>,
 }
 
 impl Plan {
@@ -209,27 +207,32 @@ impl Plan {
         Plan { folders, moves }
     }
 
-    pub fn execute(self) -> String {
+    pub fn execute(self) -> RunOutcome {
         let folder_results: Vec<_> = self.folders.into_iter().map(unfk::create_folder).collect();
         let move_results: Vec<_> = self.moves.into_iter().map(unfk::perform_move).collect();
-        let report = report_actual(&move_results, &folder_results);
 
-        if let Some(state_dir) = unfk::history::state_dir(consts::OS) {
-            let undo_rec = PendingUndo {
-                moves: move_results.into_iter().filter_map(Result::ok).collect(),
-                folders: folder_results.into_iter().filter_map(Result::ok).collect(),
-            };
-            if let Err(e) = save(&undo_rec, &state_dir) {
-                eprintln!(
-                    "Failed to write the undo log: {e}. The files were still moved but the --undo operation would be unavailable."
-                );
-            }
-        } else {
-            eprintln!(
-                "Failed to obtain the state directory. The files were still moved but the --undo operation would be unavailable."
-            );
+        RunOutcome {
+            moves: move_results,
+            folders: folder_results,
         }
-        report
+    }
+
+    pub fn report(&self) -> String {
+        let mut res = String::new();
+        let n = self.moves.len();
+        writeln!(res, "Would move {n} file(s):").expect("writing to a String cannot fail");
+
+        let mut counts: HashMap<String, usize> = HashMap::new();
+        for mv in self.moves.iter() {
+            *counts.entry(mv.category.clone()).or_default() += 1;
+        }
+
+        let mut sorted: Vec<_> = counts.into_iter().collect();
+        sorted.sort_by(|(k1, c1), (k2, c2)| c2.cmp(c1).then(k1.cmp(k2)));
+        for (k, v) in sorted.iter() {
+            writeln!(res, "  {k:<20} {v:>3}").expect("writing to a String cannot fail");
+        }
+        res
     }
 }
 
@@ -273,16 +276,31 @@ fn main() -> ExitCode {
     };
     let files_grouping = group_files(&path, args.include_dotfiles, args.by);
 
-    let stats = if args.dry {
-        report_dry(&files_grouping)
-    } else {
-        let plan = Plan::make(&files_grouping, &path);
-        if args.verbose {
-            print!("{plan}");
+    let plan = Plan::make(&files_grouping, &path);
+    if args.verbose {
+        print!("{plan}");
+    }
+
+    if args.dry {
+        eprint!("{}", plan.report());
+        return ExitCode::SUCCESS;
+    }
+
+    // TODO: refactor the section below
+    let outcome = plan.execute();
+    eprint!("{}", outcome.report());
+    if let Some(state_dir) = unfk::history::state_dir(consts::OS) {
+        let undo_rec = outcome.pending_undo();
+        if let Err(e) = save(&undo_rec, &state_dir) {
+            eprintln!(
+                "Failed to write the undo log: {e}. The files were still moved but the --undo operation would be unavailable."
+            );
         }
-        plan.execute()
-    };
-    eprintln!("{stats}");
+    } else {
+        eprintln!(
+            "Failed to obtain the state directory. The files were still moved but the --undo operation would be unavailable."
+        );
+    }
     ExitCode::SUCCESS
 }
 
@@ -317,7 +335,7 @@ mod tests {
     }
 
     #[test]
-    fn report_actual_shows_correct_counts_and_errors() {
+    fn outcome_report_shows_correct_counts_and_errors() {
         let moves = vec![
             ok_move("/doc1_src.pdf", "Documents"),
             ok_move("/doc2_src.pdf", "Documents"),
@@ -330,7 +348,8 @@ mod tests {
             Ok(PathBuf::from("./Books")),
             Ok(PathBuf::from("./Movies")),
         ];
-        let stats = report_actual(&moves, &folders);
+        let outcome = RunOutcome { moves, folders };
+        let stats = outcome.report();
         let mut rows = stats.lines();
         println!("{stats}");
         assert_eq!(rows.next(), Some("Moved 3 file(s):"));
