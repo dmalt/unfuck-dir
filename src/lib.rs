@@ -61,6 +61,8 @@ fn rename_duplicate(dst: &path::Path) -> path::PathBuf {
     dst.with_file_name(new_name)
 }
 
+/// Plan folders creation to move the files into.
+/// Existing destination folders are not added to the plan.
 pub fn plan_folders(
     files_grouping: &HashMap<String, Vec<path::PathBuf>>,
     folder_to_organize: &path::Path,
