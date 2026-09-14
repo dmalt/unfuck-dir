@@ -142,14 +142,14 @@ pub struct FileIdentity {
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
-pub struct MoveRecord {
+pub struct CompletedMove {
     pub mv: Move,
     pub identity: Option<FileIdentity>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
-pub struct UndoRecord {
-    pub moves: Vec<MoveRecord>,
+pub struct PendingUndo {
+    pub moves: Vec<CompletedMove>,
     pub folders: Vec<path::PathBuf>,
 }
 
@@ -201,10 +201,10 @@ fn read_identity(p: &path::Path) -> Option<FileIdentity> {
     })
 }
 
-pub fn perform_move(mv: Move) -> Result<MoveRecord, UnfkError> {
+pub fn perform_move(mv: Move) -> Result<CompletedMove, UnfkError> {
     fs::rename(&mv.src, &mv.dst).map_err(|e| UnfkError::move_failed(&mv, e))?;
     let fi = read_identity(&mv.dst);
-    let move_record = MoveRecord { mv, identity: fi };
+    let move_record = CompletedMove { mv, identity: fi };
     Ok(move_record)
 }
 
@@ -241,7 +241,7 @@ fn identity_matches(stored: &FileIdentity, actual: &FileIdentity) -> bool {
     true
 }
 
-fn check_undo(rec: &MoveRecord) -> Result<(), SkipReason> {
+pub fn check_undo(rec: &CompletedMove) -> Result<(), SkipReason> {
     if !rec.mv.dst.exists() {
         return Err(SkipReason::DestinationMissing);
     }
@@ -260,7 +260,7 @@ fn check_undo(rec: &MoveRecord) -> Result<(), SkipReason> {
     Ok(())
 }
 
-pub fn undo_move(rec: &MoveRecord) -> Result<(), SkipReason> {
+pub fn undo_move(rec: &CompletedMove) -> Result<(), SkipReason> {
     check_undo(rec)?;
     fs::rename(&rec.mv.dst, &rec.mv.src).map_err(SkipReason::MoveFailure)
 }
@@ -278,7 +278,7 @@ pub fn maybe_expand_tilde(path: &str) -> Result<path::PathBuf, env::VarError> {
 mod tests {
     use std::{fs, path::Path};
 
-    use crate::{Move, MoveRecord, perform_move};
+    use crate::{Move, CompletedMove, perform_move};
 
     // use super::*;
 
@@ -362,7 +362,7 @@ mod tests {
         }
     }
 
-    fn setup_moved_file(dir: &Path) -> MoveRecord {
+    fn setup_moved_file(dir: &Path) -> CompletedMove {
         let category = String::from("Documents");
         let src = dir.join("a.pdf");
         fs::write(&src, b"hello world").unwrap();

@@ -4,7 +4,7 @@ use std::io;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
-use crate::UndoRecord;
+use crate::PendingUndo;
 
 const STATE_DIRNAME: &str = "unfk";
 const UNDO_FNAME: &str = "undo.json";
@@ -34,14 +34,14 @@ pub fn state_dir(os: &str) -> Option<PathBuf> {
     }
 }
 
-pub fn save(undo_record: &UndoRecord, state_dir: &Path) -> io::Result<()> {
+pub fn save(undo_record: &PendingUndo, state_dir: &Path) -> io::Result<()> {
     let serialized = serde_json::to_string_pretty(undo_record)?;
     fs::create_dir_all(state_dir)?;
     fs::write(state_dir.join(UNDO_FNAME), serialized)?;
     Ok(())
 }
 
-pub fn load(state_dir: &Path) -> io::Result<UndoRecord> {
+pub fn load(state_dir: &Path) -> io::Result<PendingUndo> {
     let fp = state_dir.join(UNDO_FNAME);
     let contents = fs::read_to_string(fp)?;
     let undo_record = serde_json::from_str(&contents)?;
@@ -66,7 +66,7 @@ mod tests {
     use super::*;
 
     use crate::{
-        FileIdentity, Move, MoveRecord,
+        FileIdentity, Move, CompletedMove,
         temp_env::{with_var, with_vars},
     };
 
@@ -143,14 +143,14 @@ mod tests {
         });
     }
 
-    fn sample_move(src: &str, cat: &str, identity: Option<FileIdentity>) -> MoveRecord {
+    fn sample_move(src: &str, cat: &str, identity: Option<FileIdentity>) -> CompletedMove {
         let dst = src.replace("src", "dst");
         let mv = Move {
             src: PathBuf::from(src),
             dst: PathBuf::from(dst),
             category: String::from(cat),
         };
-        MoveRecord { mv, identity }
+        CompletedMove { mv, identity }
     }
 
     #[test]
@@ -164,7 +164,7 @@ mod tests {
             mtime: None,
             size_bytes: 128,
         });
-        let undo_record_orig = UndoRecord {
+        let undo_record_orig = PendingUndo {
             moves: vec![
                 sample_move("doc1_src.pdf", "Documents", id1),
                 sample_move("doc2_src.pdf", "Documents", id2),
