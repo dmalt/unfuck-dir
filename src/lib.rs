@@ -241,7 +241,7 @@ fn identity_matches(stored: &FileIdentity, actual: &FileIdentity) -> bool {
     true
 }
 
-pub fn undo_move(rec: &MoveRecord) -> Result<(), SkipReason> {
+fn check_undo(rec: &MoveRecord) -> Result<(), SkipReason> {
     if !rec.mv.dst.exists() {
         return Err(SkipReason::DestinationMissing);
     }
@@ -257,7 +257,11 @@ pub fn undo_move(rec: &MoveRecord) -> Result<(), SkipReason> {
     {
         return Err(SkipReason::IdentityMismatch);
     }
+    Ok(())
+}
 
+pub fn undo_move(rec: &MoveRecord) -> Result<(), SkipReason> {
+    check_undo(rec)?;
     fs::rename(&rec.mv.dst, &rec.mv.src).map_err(SkipReason::MoveFailure)
 }
 
@@ -272,79 +276,89 @@ pub fn maybe_expand_tilde(path: &str) -> Result<path::PathBuf, env::VarError> {
 
 #[cfg(test)]
 mod tests {
-    use std::{path::Path, time::Duration};
+    use std::{fs, path::Path};
 
-    use tempfile::tempdir;
+    use crate::{Move, MoveRecord, perform_move};
 
-    use super::*;
+    // use super::*;
 
-    #[test]
-    fn rename_duplicate_stem_first_duplicate() {
-        let res = rename_duplicate_stem("some_name");
-        assert_eq!(res, "some_name__1");
-    }
+    mod rename_duplicate_stem {
+        use crate::rename_duplicate_stem;
 
-    #[test]
-    fn rename_duplicate_stem_second_duplicate() {
-        let res = rename_duplicate_stem("some_name__1");
-        assert_eq!(res, "some_name__2");
-    }
+        #[test]
+        fn rename_duplicate_stem_first_duplicate() {
+            let res = rename_duplicate_stem("some_name");
+            assert_eq!(res, "some_name__1");
+        }
 
-    #[test]
-    fn rename_duplicate_stem_nth_duplicate() {
-        let res = rename_duplicate_stem("some_name__6");
-        assert_eq!(res, "some_name__7");
-    }
+        #[test]
+        fn rename_duplicate_stem_second_duplicate() {
+            let res = rename_duplicate_stem("some_name__1");
+            assert_eq!(res, "some_name__2");
+        }
 
-    #[test]
-    fn rename_duplicate_stem_max_duplicate() {
-        let res = rename_duplicate_stem("some_name__255");
-        assert_eq!(res, "some_name__255__1");
-    }
+        #[test]
+        fn rename_duplicate_stem_nth_duplicate() {
+            let res = rename_duplicate_stem("some_name__6");
+            assert_eq!(res, "some_name__7");
+        }
 
-    fn id(size_bytes: u64, mtime: Option<SystemTime>) -> FileIdentity {
-        FileIdentity { size_bytes, mtime }
-    }
-
-    #[test]
-    fn identity_matches_mismatched_sizes_are_rejected() {
-        let t1 = SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000);
-        let t2 = SystemTime::UNIX_EPOCH + Duration::from_secs(1_800_000_000);
-
-        #[rustfmt::skip]
-        let cases = [
-            ("both missing",         None,     None    ),
-            ("stored missing",       None,     Some(t1)),
-            ("actual missing",       Some(t1), None    ),
-            ("both present, equal",  Some(t1), Some(t1)),
-            ("both present, differ", Some(t1), Some(t2)),
-        ];
-
-        for (name, stored_mtime, actual_mtime) in cases {
-            let stored = id(1234, stored_mtime);
-            let actual = id(5678, actual_mtime);
-            assert!(!identity_matches(&stored, &actual), "case: {name}");
+        #[test]
+        fn rename_duplicate_stem_max_duplicate() {
+            let res = rename_duplicate_stem("some_name__255");
+            assert_eq!(res, "some_name__255__1");
         }
     }
 
-    #[test]
-    fn identity_matches_mtime_comparison_at_equal_sizes() {
-        let t1 = SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000);
-        let t2 = SystemTime::UNIX_EPOCH + Duration::from_secs(1_800_000_000);
+    mod identity_matches {
+        use std::time::{Duration, SystemTime};
 
-        #[rustfmt::skip]
-        let cases = [
-            ("both missing",         None,     None,     true),
-            ("stored missing",       None,     Some(t1), true),
-            ("actual missing",       Some(t1), None,     true),
-            ("both present, equal",  Some(t1), Some(t1), true),
-            ("both present, differ", Some(t1), Some(t2), false),
-        ];
+        use crate::{FileIdentity, identity_matches};
 
-        for (name, stored_mtime, actual_mtime, expected) in cases {
-            let stored = id(4096, stored_mtime);
-            let actual = id(4096, actual_mtime);
-            assert_eq!(identity_matches(&stored, &actual), expected, "case: {name}");
+        fn id(size_bytes: u64, mtime: Option<SystemTime>) -> FileIdentity {
+            FileIdentity { size_bytes, mtime }
+        }
+
+        #[test]
+        fn identity_matches_mismatched_sizes_are_rejected() {
+            let t1 = SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+            let t2 = SystemTime::UNIX_EPOCH + Duration::from_secs(1_800_000_000);
+
+            #[rustfmt::skip]
+            let cases = [
+                ("both missing",         None,     None    ),
+                ("stored missing",       None,     Some(t1)),
+                ("actual missing",       Some(t1), None    ),
+                ("both present, equal",  Some(t1), Some(t1)),
+                ("both present, differ", Some(t1), Some(t2)),
+            ];
+
+            for (name, stored_mtime, actual_mtime) in cases {
+                let stored = id(1234, stored_mtime);
+                let actual = id(5678, actual_mtime);
+                assert!(!identity_matches(&stored, &actual), "case: {name}");
+            }
+        }
+
+        #[test]
+        fn identity_matches_mtime_comparison_at_equal_sizes() {
+            let t1 = SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+            let t2 = SystemTime::UNIX_EPOCH + Duration::from_secs(1_800_000_000);
+
+            #[rustfmt::skip]
+            let cases = [
+                ("both missing",         None,     None,     true),
+                ("stored missing",       None,     Some(t1), true),
+                ("actual missing",       Some(t1), None,     true),
+                ("both present, equal",  Some(t1), Some(t1), true),
+                ("both present, differ", Some(t1), Some(t2), false),
+            ];
+
+            for (name, stored_mtime, actual_mtime, expected) in cases {
+                let stored = id(4096, stored_mtime);
+                let actual = id(4096, actual_mtime);
+                assert_eq!(identity_matches(&stored, &actual), expected, "case: {name}");
+            }
         }
     }
 
@@ -355,107 +369,141 @@ mod tests {
         let cat_dir = dir.join(&category);
         fs::create_dir(&cat_dir).unwrap();
         let dst = cat_dir.join("a.pdf");
-        let mv = Move { src, dst, category };
+        let mv = Move{ src, dst, category };
         perform_move(mv).unwrap()
     }
 
-    #[test]
-    fn undo_move_happy_path() {
-        let tmp = tempdir().unwrap();
-        let rec = setup_moved_file(tmp.path());
+    mod check_undo {
+        use tempfile::tempdir;
 
-        assert!(rec.mv.dst.exists());
-        assert!(!rec.mv.src.exists());
-        undo_move(&rec).unwrap();
+        use super::setup_moved_file;
+        use crate::{SkipReason, check_undo};
+        use std::fs;
 
-        assert!(!rec.mv.dst.exists());
-        assert!(rec.mv.src.exists());
-        assert_eq!(fs::read(&rec.mv.src).unwrap(), b"hello world");
+        #[test]
+        fn happy_path() {
+            let tmp = tempdir().unwrap();
+            let rec = setup_moved_file(tmp.path());
+
+            assert!(rec.mv.dst.exists());
+            assert!(!rec.mv.src.exists());
+            assert!(check_undo(&rec).is_ok());
+        }
+
+        #[test]
+        fn skips_destination_missing() {
+            let tmp = tempdir().unwrap();
+            let rec = setup_moved_file(tmp.path());
+            fs::remove_file(&rec.mv.dst).unwrap();
+
+            let res = check_undo(&rec);
+
+            assert!(
+                matches!(res, Err(SkipReason::DestinationMissing)),
+                "expected DestinationMissing, got {res:?}"
+            );
+        }
+
+        #[test]
+        fn skips_existing_source() {
+            let tmp = tempdir().unwrap();
+            let rec = setup_moved_file(tmp.path());
+            let content_before = b"goodbye world";
+            fs::write(&rec.mv.src, content_before).unwrap();
+
+            let res = check_undo(&rec);
+
+            assert!(
+                matches!(res, Err(SkipReason::SourceOccupied)),
+                "expected SourceOccupied, got {res:?}"
+            );
+        }
+
+        #[test]
+        fn skips_on_identity_mismatch() {
+            let tmp = tempdir().unwrap();
+            let rec = setup_moved_file(tmp.path());
+            let content_before = b"goodbye world";
+            fs::write(&rec.mv.dst, content_before).unwrap();
+
+            let res = check_undo(&rec);
+
+            assert!(
+                matches!(res, Err(SkipReason::IdentityMismatch)),
+                "expected IdentityMismatch, got {res:?}"
+            );
+        }
+
+        #[test]
+        fn proceeds_when_identity_is_not_recorded() {
+            let tmp = tempdir().unwrap();
+            let mut rec = setup_moved_file(tmp.path());
+            rec.identity = None;
+            let content_before = b"goodbye world";
+            fs::write(&rec.mv.dst, content_before).unwrap();
+
+            assert!(check_undo(&rec).is_ok());
+        }
     }
 
-    #[test]
-    fn undo_move_skips_destination_missing() {
-        let tmp = tempdir().unwrap();
-        let rec = setup_moved_file(tmp.path());
-        fs::remove_file(&rec.mv.dst).unwrap();
+    mod undo_move {
+        use std::fs;
 
-        let res = undo_move(&rec);
+        use tempfile::tempdir;
 
-        assert!(
-            matches!(res, Err(SkipReason::DestinationMissing)),
-            "expected DestinationMissing, got {res:?}"
-        );
-        assert!(
-            !rec.mv.src.exists(),
-            "the source shouldn't reappear after the failed undo"
-        );
+        use super::setup_moved_file;
+        use crate::{SkipReason, undo_move};
+        use std::os::unix::fs::PermissionsExt;
+
+        #[test]
+        fn file_is_restored_and_has_proper_content_on_happy_path() {
+            let tmp = tempdir().unwrap();
+            let rec = setup_moved_file(tmp.path());
+
+            assert!(rec.mv.dst.exists());
+            assert!(!rec.mv.src.exists());
+            undo_move(&rec).unwrap();
+
+            assert!(!rec.mv.dst.exists());
+            assert!(rec.mv.src.exists());
+            assert_eq!(fs::read(&rec.mv.src).unwrap(), b"hello world");
+        }
+
+        #[test]
+        fn nothing_changes_on_failed_check() {
+            let tmp = tempdir().unwrap();
+            let rec = setup_moved_file(tmp.path());
+            let content_before = b"goodbye world";
+            fs::write(&rec.mv.src, content_before).unwrap();
+
+            let res = undo_move(&rec);
+
+            assert!(res.is_err(), "Should produce 'SourceOccupied', got {res:?}");
+            assert!(
+                rec.mv.dst.exists(),
+                "the destination file shouldn't be moved after the failed undo"
+            );
+            let cont_after = fs::read(&rec.mv.src).unwrap();
+            assert_eq!(
+                cont_after, content_before,
+                "the source file should stay unchanged"
+            );
+        }
+
+        #[test]
+        fn produces_move_failure_when_cant_perform_move() {
+            let tmp = tempdir().unwrap();
+            let rec = setup_moved_file(tmp.path());
+
+            fs::set_permissions(tmp.path(), fs::Permissions::from_mode(0o555)).unwrap();
+            let res = undo_move(&rec);
+            // restore the perms so that Drop can remove the tempdir
+            fs::set_permissions(tmp.path(), fs::Permissions::from_mode(0o755)).unwrap();
+
+            assert!(
+                matches!(res, Err(SkipReason::MoveFailure(_))),
+                "Expected 'MoveFailure' got {res:?}"
+            );
+        }
     }
-
-    #[test]
-    fn undo_move_skips_existing_source() {
-        let tmp = tempdir().unwrap();
-        let rec = setup_moved_file(tmp.path());
-        let content_before = b"goodbye world";
-        fs::write(&rec.mv.src, content_before).unwrap();
-
-        let res = undo_move(&rec);
-
-        assert!(
-            matches!(res, Err(SkipReason::SourceOccupied)),
-            "expected SourceOccupied, got {res:?}"
-        );
-        assert!(
-            rec.mv.dst.exists(),
-            "the destination file shouldn't be moved after the failed undo"
-        );
-        let cont_after = fs::read(&rec.mv.src).unwrap();
-        assert_eq!(
-            cont_after, content_before,
-            "the source file should stay unchanged"
-        );
-    }
-
-    #[test]
-    fn undo_move_skips_on_identity_mismatch() {
-        let tmp = tempdir().unwrap();
-        let rec = setup_moved_file(tmp.path());
-        let content_before = b"goodbye world";
-        fs::write(&rec.mv.dst, content_before).unwrap();
-
-        let res = undo_move(&rec);
-
-        assert!(
-            matches!(res, Err(SkipReason::IdentityMismatch)),
-            "expected IdentityMismatch, got {res:?}"
-        );
-        assert!(
-            rec.mv.dst.exists(),
-            "the destination file shouldn't be moved after the failed undo"
-        );
-        assert!(
-            !rec.mv.src.exists(),
-            "the source shouldn't reappear after the failed undo"
-        );
-    }
-
-    #[test]
-    fn undo_move_proceeds_when_identity_is_not_recorded() {
-        let tmp = tempdir().unwrap();
-        let mut rec = setup_moved_file(tmp.path());
-        rec.identity = None;
-        let content_before = b"goodbye world";
-        fs::write(&rec.mv.dst, content_before).unwrap();
-
-        undo_move(&rec).unwrap();
-
-        assert!(!rec.mv.dst.exists());
-        assert!(rec.mv.src.exists());
-        assert_eq!(fs::read(&rec.mv.src).unwrap(), content_before);
-    }
-
-    // #[test]
-    // fn format_mv_shortens_only_first_home_env_occurence() {
-    //     let from =
-    //     let res = format_mv(from, to);
-    // }
 }
