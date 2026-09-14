@@ -1,8 +1,9 @@
 use clap::{Parser, ValueEnum};
 use std::env::consts;
 use std::fmt::Write;
-use std::io::{Error, ErrorKind};
+use std::io;
 use std::path::PathBuf;
+use std::process::ExitCode;
 use std::{collections::HashMap, fs, path, process};
 use unfk::history::{clear, save};
 use unfk::{MoveRecord, UndoRecord, UnfkError};
@@ -126,9 +127,29 @@ fn group_files(
     }
 }
 
-fn undo() -> Result<(), Error> {
-    let state_dir = unfk::history::state_dir(consts::OS).unwrap();
-    let undo_record = unfk::history::load(&state_dir).unwrap();
+/// Reverse the most recent run. Report everything to stderr itself
+/// and return the process exit code
+fn undo() -> ExitCode {
+    let Some(state_dir) = unfk::history::state_dir(consts::OS) else {
+        eprintln!("Could not determine the state directory");
+        return ExitCode::FAILURE;
+    };
+    let undo_record = match unfk::history::load(&state_dir) {
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {
+            eprintln!("Nothing to undo!");
+            return ExitCode::SUCCESS;
+        }
+        Err(e) if e.kind() == io::ErrorKind::InvalidData => {
+            eprintln!("The undo file is damaged!");
+            return ExitCode::FAILURE;
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            return ExitCode::FAILURE;
+        }
+        Ok(undo_record) => undo_record,
+    };
+
     let mut unresolved_moves: Vec<MoveRecord> = Vec::new();
     for rec in undo_record.moves {
         if let Err(reason) = unfk::undo_move(&rec) {
@@ -139,7 +160,7 @@ fn undo() -> Result<(), Error> {
     let mut unresolved_folders: Vec<PathBuf> = Vec::new();
     for folder in undo_record.folders {
         if let Err(reason) = fs::remove_dir(&folder) {
-            if reason.kind() == ErrorKind::NotFound {
+            if reason.kind() == io::ErrorKind::NotFound {
                 eprintln!("{folder:?} was already removed");
             } else {
                 eprintln!("Skipping {folder:?}: {reason}");
@@ -149,28 +170,32 @@ fn undo() -> Result<(), Error> {
     }
 
     if !(unresolved_moves.is_empty() && unresolved_folders.is_empty()) {
+        eprintln!("Some entries could not be reverted and remain queued for the next --undo.");
         let undo_rec = UndoRecord {
             moves: unresolved_moves,
             folders: unresolved_folders,
         };
-        save(&undo_rec, &state_dir)?;
-    } else {
-        clear(&state_dir)?;
+        if let Err(e) = save(&undo_rec, &state_dir) {
+            eprintln!("Failed to write the undo log for the failed undos: {e}.");
+            return ExitCode::FAILURE;
+        }
+    } else if let Err(e) = clear(&state_dir) {
+        eprintln!("Everything was reverted, but couldn't remove the undo log: {e}.");
+        return ExitCode::FAILURE;
     }
-    Ok(())
+    ExitCode::SUCCESS
 }
 
-fn main() {
+fn main() -> ExitCode {
     let args = Args::parse();
 
     if args.show_categories {
         println!("{}", unfk::group::format_type_to_exts());
-        process::exit(0);
+        return ExitCode::SUCCESS;
     }
 
     if args.undo {
-        undo().unwrap();
-        process::exit(0);
+        return undo();
     }
 
     let Ok(path) = unfk::maybe_expand_tilde(&args.path) else {
@@ -178,7 +203,7 @@ fn main() {
             "Failed to expand tilde in '{}'. Is the $HOME env var set?",
             &args.path
         );
-        process::exit(1);
+        return ExitCode::FAILURE;
     };
     let files_grouping = group_files(&path, args.include_dotfiles, args.by);
     if args.dry {
@@ -223,8 +248,8 @@ fn main() {
         }
         report
     };
-
     eprintln!("{stats}");
+    ExitCode::SUCCESS
 }
 
 #[cfg(test)]
