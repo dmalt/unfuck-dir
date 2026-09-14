@@ -66,7 +66,7 @@ mod tests {
     use super::*;
 
     use crate::{
-        FileIdentity, Move, CompletedMove,
+        CompletedMove, FileIdentity, Move,
         temp_env::{with_var, with_vars},
     };
 
