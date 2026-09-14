@@ -1,9 +1,10 @@
 use clap::{Parser, ValueEnum};
 use std::env::consts;
 use std::fmt::Write;
+use std::io::{Error, ErrorKind};
 use std::path::PathBuf;
 use std::{collections::HashMap, fs, path, process};
-use unfk::history::save;
+use unfk::history::{clear, save};
 use unfk::{MoveRecord, UndoRecord, UnfkError};
 
 #[derive(Parser)]
@@ -125,6 +126,40 @@ fn group_files(
     }
 }
 
+fn undo() -> Result<(), Error> {
+    let state_dir = unfk::history::state_dir(consts::OS).unwrap();
+    let undo_record = unfk::history::load(&state_dir).unwrap();
+    let mut unresolved_moves: Vec<MoveRecord> = Vec::new();
+    for rec in undo_record.moves {
+        if let Err(reason) = unfk::undo_move(&rec) {
+            eprintln!("Skipping {}: {reason}", rec.mv.dst.display());
+            unresolved_moves.push(rec);
+        }
+    }
+    let mut unresolved_folders: Vec<PathBuf> = Vec::new();
+    for folder in undo_record.folders {
+        if let Err(reason) = fs::remove_dir(&folder) {
+            if reason.kind() == ErrorKind::NotFound {
+                eprintln!("{folder:?} was already removed");
+            } else {
+                eprintln!("Skipping {folder:?}: {reason}");
+                unresolved_folders.push(folder);
+            }
+        }
+    }
+
+    if !(unresolved_moves.is_empty() && unresolved_folders.is_empty()) {
+        let undo_rec = UndoRecord {
+            moves: unresolved_moves,
+            folders: unresolved_folders,
+        };
+        save(&undo_rec, &state_dir)?;
+    } else {
+        clear(&state_dir)?;
+    }
+    Ok(())
+}
+
 fn main() {
     let args = Args::parse();
 
@@ -132,6 +167,12 @@ fn main() {
         println!("{}", unfk::group::format_type_to_exts());
         process::exit(0);
     }
+
+    if args.undo {
+        undo().unwrap();
+        process::exit(0);
+    }
+
     let Ok(path) = unfk::maybe_expand_tilde(&args.path) else {
         eprintln!(
             "Failed to expand tilde in '{}'. Is the $HOME env var set?",
