@@ -187,7 +187,7 @@ impl RunOutcome {
         res
     }
 
-    pub fn pending_undo(self) -> PendingUndo {
+    pub fn undoable(self) -> PendingUndo {
         PendingUndo {
             moves: self.moves.into_iter().filter_map(Result::ok).collect(),
             folders: self.folders.into_iter().filter_map(Result::ok).collect(),
@@ -290,8 +290,8 @@ fn main() -> ExitCode {
     let outcome = plan.execute();
     eprint!("{}", outcome.report());
     if let Some(state_dir) = unfk::history::state_dir(consts::OS) {
-        let undo_rec = outcome.pending_undo();
-        if let Err(e) = save(&undo_rec, &state_dir) {
+        let undo_queue = outcome.undoable();
+        if let Err(e) = save(&undo_queue, &state_dir) {
             eprintln!(
                 "Failed to write the undo log: {e}. The files were still moved but the --undo operation would be unavailable."
             );
