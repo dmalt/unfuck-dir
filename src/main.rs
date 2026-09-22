@@ -12,6 +12,13 @@ const EXIT_PARTIAL: u8 = 3;
 #[derive(Parser)]
 #[command(name = "downloads-sorter")]
 #[command(about = "Organize files by date or type.")]
+#[command(after_long_help = "\
+EXIT CODES:
+  0  success, including \"nothing to undo\"
+  1  could not proceed (no state directory, damaged record, write failure)
+  2  invalid arguments
+  3  partial undo: some entries were not reverted and remain queued
+")]
 struct Args {
     /// Path to the folder to organize
     #[arg(short, long, default_value = "~/Downloads")]
