@@ -103,24 +103,6 @@ fn undo(dry: bool, verbose: bool) -> ExitCode {
         Ok(undo_plan) => undo_plan,
     };
 
-    // n = total moves
-    // plan.check() -> good moves, bad moves + reason
-    //
-    // if dry: cumulative report; if verbose, report the individual fails and good moves
-    // actual_undo_moves(good_moves) -> bad_moves + reason
-    // merge bad moves from check and the actual undo
-    // if there are any bad moves, overwrite the undo log
-    // report the overall thing; if verbose; show the individual moves and fails
-
-    // eprintln!("Would skip {}: {reason}", rec.mv.dst.display());
-    // let mut moves_result: Vec<Result<CompletedMove, (CompletedMove, SkipReason)>> = Vec::new();
-    // for rec in undo_plan.moves {
-    //     match rec.check_undo() {
-    //         Err(reason) => moves_result.push(Err((rec, reason))),
-    //         Ok(()) => moves_result.push(Ok(rec)),
-    //     }
-    // }
-
     if dry {
         if verbose {
             print!("{undo_plan}");
@@ -133,6 +115,7 @@ fn undo(dry: bool, verbose: bool) -> ExitCode {
     if verbose {
         print!("{}", undo_outcome);
     }
+    eprint!("{}", undo_outcome.report());
 
     if let Some(undo_plan) = undo_outcome.failed() {
         eprintln!("Some entries could not be reverted and remain queued for the next --undo.");
@@ -145,7 +128,6 @@ fn undo(dry: bool, verbose: bool) -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    eprint!("{}", undo_outcome.report());
 
     ExitCode::SUCCESS
 }

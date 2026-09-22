@@ -103,7 +103,7 @@ impl fmt::Display for FailedMove {
 #[derive(Debug)]
 pub struct FailedMkdir {
     pub folder: path::PathBuf,
-    pub reason: io::Error,
+    reason: io::Error,
 }
 
 impl FailedMkdir {
