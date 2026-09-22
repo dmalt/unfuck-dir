@@ -183,7 +183,7 @@ mod tests {
         use std::fs;
         use tempfile::tempdir;
 
-        use crate::history::{UNDO_FNAME, clear};
+        use crate::undo::{UNDO_FNAME, clear};
 
         #[test]
         fn returns_ok_on_missing() {
