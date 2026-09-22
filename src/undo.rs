@@ -100,7 +100,7 @@ fn identity_matches(stored: &FileIdentity, actual: &FileIdentity) -> bool {
 }
 
 impl ReverseMove {
-    pub fn from(mv: Move) -> Self {
+    pub fn capture(mv: Move) -> Self {
         let identity = read_identity(&mv.dst);
         let mv = mv.flip();
         ReverseMove { mv, identity }
@@ -150,10 +150,10 @@ fn read_identity(p: &path::Path) -> Option<FileIdentity> {
 }
 
 impl PendingUndo {
-    pub fn from(outcome: RunOutcome) -> Self {
+    pub fn capture(outcome: RunOutcome) -> Self {
         let mut moves: Vec<ReverseMove> = Vec::new();
         for mv in outcome.moves.into_iter().filter_map(Result::ok) {
-            moves.push(ReverseMove::from(mv));
+            moves.push(ReverseMove::capture(mv));
         }
         PendingUndo {
             moves,
@@ -570,7 +570,7 @@ mod tests {
         fs::create_dir(&cat_dir).unwrap();
         let dst = cat_dir.join("a.pdf");
         let mv = Move { src, dst, category };
-        ReverseMove::from(mv.execute().unwrap())
+        ReverseMove::capture(mv.execute().unwrap())
     }
 
     mod check_undo {
