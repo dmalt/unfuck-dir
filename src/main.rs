@@ -7,6 +7,8 @@ use unfk::undo::PendingUndo;
 use unfk::undo::{clear, save};
 use unfk::{RunPlan, display_path};
 
+const EXIT_PARTIAL: u8 = 3;
+
 #[derive(Parser)]
 #[command(name = "downloads-sorter")]
 #[command(about = "Organize files by date or type.")]
@@ -123,6 +125,7 @@ fn undo(dry: bool, verbose: bool) -> ExitCode {
             eprintln!("Failed to write the undo log for the failed undos: {e}.");
             return ExitCode::FAILURE;
         }
+        return ExitCode::from(EXIT_PARTIAL);
     } else if let Err(e) = clear(&state_dir) {
         eprintln!("Everything was reverted, but couldn't remove the undo log: {e}.");
         return ExitCode::FAILURE;
