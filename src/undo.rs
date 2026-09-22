@@ -166,14 +166,14 @@ impl PendingUndo {
 
 impl fmt::Display for PendingUndo {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        for folder in &self.folders {
-            writeln!(f, "[rmdir] {}", display_path(folder))?;
-        }
-        if !self.folders.is_empty() {
-            writeln!(f)?;
-        }
         for reversal in &self.moves {
             writeln!(f, "{}", reversal.mv)?;
+        }
+        if !self.moves.is_empty() {
+            writeln!(f)?;
+        }
+        for folder in &self.folders {
+            writeln!(f, "[rmdir] {}", display_path(folder))?;
         }
         Ok(())
     }
@@ -269,17 +269,17 @@ fn fmt_folder(f: &mut fmt::Formatter, folder: &Result<FolderOutcome, FailedRmdir
 
 impl fmt::Display for UndoOutcome {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        for folder_res in &self.folders {
-            fmt_folder(f, folder_res)?;
-        }
-        if !self.folders.is_empty() {
-            writeln!(f)?;
-        }
         for mv_res in &self.moves {
             match mv_res {
                 Ok(mv) => writeln!(f, "{}", mv)?,
                 Err(fail) => writeln!(f, "[mv] {} FAILED: {}", fail.reversal.mv, fail.reason)?,
             }
+        }
+        if !self.moves.is_empty() {
+            writeln!(f)?;
+        }
+        for folder_res in &self.folders {
+            fmt_folder(f, folder_res)?;
         }
         Ok(())
     }
