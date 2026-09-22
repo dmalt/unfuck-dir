@@ -89,7 +89,7 @@ fn undo(dry: bool, verbose: bool) -> ExitCode {
     };
     let undo_plan = match unfk::undo::load(&state_dir) {
         Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            eprintln!("Nothing to undo!");
+            eprintln!("Nothing to undo.");
             return ExitCode::SUCCESS;
         }
         Err(e) if e.kind() == io::ErrorKind::InvalidData => {
@@ -105,7 +105,7 @@ fn undo(dry: bool, verbose: bool) -> ExitCode {
 
     if dry {
         if verbose {
-            print!("{undo_plan}");
+            println!("{undo_plan}");
         }
         eprint!("{}", undo_plan.report());
         return ExitCode::SUCCESS;
@@ -113,7 +113,7 @@ fn undo(dry: bool, verbose: bool) -> ExitCode {
     let undo_outcome = undo_plan.execute();
 
     if verbose {
-        print!("{}", undo_outcome);
+        println!("{}", undo_outcome);
     }
     eprint!("{}", undo_outcome.report());
 
