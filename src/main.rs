@@ -117,9 +117,9 @@ fn undo(dry: bool, verbose: bool) -> ExitCode {
     }
     eprint!("{}", undo_outcome.report());
 
-    if let Some(undo_plan) = undo_outcome.failed() {
+    if let Some(remaining) = undo_outcome.failed() {
         eprintln!("Some entries could not be reverted and remain queued for the next --undo.");
-        if let Err(e) = save(&undo_plan, &state_dir) {
+        if let Err(e) = save(&remaining, &state_dir) {
             eprintln!("Failed to write the undo log for the failed undos: {e}.");
             return ExitCode::FAILURE;
         }
