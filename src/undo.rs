@@ -25,34 +25,34 @@ pub enum SkipReason {
 
 #[derive(Debug)]
 pub struct FailedUndoMove {
-    pub mv: ReverseMove,
-    pub reason: SkipReason,
+    pub reversal: ReverseMove,
+    reason: SkipReason,
 }
 
 impl fmt::Display for FailedUndoMove {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Failed to move {}: {}", self.mv.mv, self.reason)
+        write!(f, "Failed to move {}: {}", self.reversal.mv, self.reason)
     }
 }
 
 #[derive(Debug)]
 pub struct FailedRmdir {
     pub folder: path::PathBuf,
-    pub source: io::Error,
+    reason: io::Error,
 }
 
 impl FailedRmdir {
-    pub fn new(path: &path::Path, source: io::Error) -> Self {
+    pub fn new(path: &path::Path, reason: io::Error) -> Self {
         FailedRmdir {
             folder: path.to_path_buf(),
-            source,
+            reason,
         }
     }
 }
 
 impl fmt::Display for FailedRmdir {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Failed to remove {:?}: {}", self.folder, self.source)
+        write!(f, "Failed to remove {:?}: {}", self.folder, self.reason)
     }
 }
 
@@ -69,12 +69,12 @@ impl fmt::Display for SkipReason {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct PendingUndo {
-    pub moves: Vec<ReverseMove>,
-    pub folders: Vec<path::PathBuf>,
+    moves: Vec<ReverseMove>,
+    folders: Vec<path::PathBuf>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
-pub struct FileIdentity {
+struct FileIdentity {
     pub mtime: Option<SystemTime>,
     pub size_bytes: u64,
 }
@@ -82,7 +82,7 @@ pub struct FileIdentity {
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub struct ReverseMove {
     pub mv: Move,
-    pub identity: Option<FileIdentity>,
+    identity: Option<FileIdentity>,
 }
 
 fn identity_matches(stored: &FileIdentity, actual: &FileIdentity) -> bool {
@@ -109,7 +109,7 @@ impl ReverseMove {
     pub fn execute(self) -> Result<Move, FailedUndoMove> {
         if !self.mv.src.exists() {
             return Err(FailedUndoMove {
-                mv: self,
+                reversal: self,
                 reason: SkipReason::Missing,
             });
         }
@@ -117,7 +117,7 @@ impl ReverseMove {
         if self.mv.dst.exists() {
             // TODO: check if the identity matches and simply move the original
             return Err(FailedUndoMove {
-                mv: self,
+                reversal: self,
                 reason: SkipReason::Occupied,
             });
         }
@@ -128,14 +128,14 @@ impl ReverseMove {
             && !identity_matches(stored_fi, actual_fi)
         {
             return Err(FailedUndoMove {
-                mv: self,
+                reversal: self,
                 reason: SkipReason::IdentityMismatch,
             });
         }
         match self.mv.clone().execute() {
             Ok(mv) => Ok(mv),
             Err(e) => Err(FailedUndoMove {
-                mv: self,
+                reversal: self,
                 reason: SkipReason::MoveFailure(e.reason),
             }),
         }
@@ -182,14 +182,14 @@ pub enum FolderOutcomeType {
     AlreadyGone,
 }
 
-pub struct FolderOutcome {
+struct FolderOutcome {
     pub folder: path::PathBuf,
-    pub outcome_type: FolderOutcomeType,
+    outcome_type: FolderOutcomeType,
 }
 
 pub struct UndoOutcome {
     pub moves: Vec<Result<Move, FailedUndoMove>>,
-    pub folders: Vec<Result<FolderOutcome, FailedRmdir>>,
+    folders: Vec<Result<FolderOutcome, FailedRmdir>>,
 }
 
 impl UndoOutcome {
@@ -198,7 +198,7 @@ impl UndoOutcome {
             .moves
             .iter()
             .filter_map(|x| x.as_ref().err())
-            .map(|x| x.mv.clone())
+            .map(|x| x.reversal.clone())
             .collect();
         let pending_folders: Vec<path::PathBuf> = self
             .folders
@@ -253,8 +253,15 @@ impl fmt::Display for UndoOutcome {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for folder_res in &self.folders {
             match folder_res {
-                Ok(fo) => writeln!(f, "[rmdir] {:?}", fo.folder)?,
-                Err(e) => writeln!(f, "[rmdir failed] '{:?}': {}", e.folder, e.source)?,
+                Ok(fo) => match fo.outcome_type {
+                    FolderOutcomeType::SuccessfullyRemoved => {
+                        writeln!(f, "[rmdir] {:?}", fo.folder)?
+                    }
+                    FolderOutcomeType::AlreadyGone => {
+                        writeln!(f, "[skipping] {:?}: already gone", fo.folder)?
+                    }
+                },
+                Err(e) => writeln!(f, "[rmdir failed] '{:?}': {}", e.folder, e.reason)?,
             }
         }
         if !self.folders.is_empty() {
@@ -263,7 +270,7 @@ impl fmt::Display for UndoOutcome {
         for mv_res in &self.moves {
             match mv_res {
                 Ok(mv) => writeln!(f, "{}", mv)?,
-                Err(fumv) => writeln!(f, "[mv failed] {}: {}", fumv.mv.mv, fumv.reason)?,
+                Err(fumv) => writeln!(f, "[mv failed] {}: {}", fumv.reversal.mv, fumv.reason)?,
             }
         }
         Ok(())
