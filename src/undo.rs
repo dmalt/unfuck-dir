@@ -165,7 +165,7 @@ impl PendingUndo {
 impl fmt::Display for PendingUndo {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for folder in &self.folders {
-            writeln!(f, "[mkdir] {folder:?}")?;
+            writeln!(f, "[rmdir] {folder:?}")?;
         }
         if !self.folders.is_empty() {
             writeln!(f)?;
@@ -206,7 +206,7 @@ impl UndoOutcome {
             .filter_map(|x| x.as_ref().err())
             .map(|x| x.folder.clone())
             .collect();
-        if pending_moves.is_empty() || pending_folders.is_empty() {
+        if pending_moves.is_empty() && pending_folders.is_empty() {
             return None;
         }
         Some(PendingUndo {
@@ -218,7 +218,7 @@ impl UndoOutcome {
     pub fn report(&self) -> String {
         let mut res = String::new();
         let n = self.moves.iter().filter(|x| x.is_ok()).count();
-        writeln!(res, "Moved {n} file(s):").expect("writing to a String cannot fail");
+        writeln!(res, "Reverted {n} file(s):").expect("writing to a String cannot fail");
 
         let mut counts: HashMap<String, usize> = HashMap::new();
         for mv in self.moves.iter().filter_map(|m| m.as_ref().ok()) {
@@ -253,8 +253,8 @@ impl fmt::Display for UndoOutcome {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for folder_res in &self.folders {
             match folder_res {
-                Ok(fo) => writeln!(f, "[mkdir] {:?}", fo.folder)?,
-                Err(e) => writeln!(f, "failed to remove '{:?}': {}", e.folder, e.source)?,
+                Ok(fo) => writeln!(f, "[rmdir] {:?}", fo.folder)?,
+                Err(e) => writeln!(f, "[rmdir failed] '{:?}': {}", e.folder, e.source)?,
             }
         }
         if !self.folders.is_empty() {
@@ -263,7 +263,7 @@ impl fmt::Display for UndoOutcome {
         for mv_res in &self.moves {
             match mv_res {
                 Ok(mv) => writeln!(f, "{}", mv)?,
-                Err(fumv) => writeln!(f, "move failed: {}: {}", fumv.mv.mv, fumv.reason)?,
+                Err(fumv) => writeln!(f, "[mv failed] {}: {}", fumv.mv.mv, fumv.reason)?,
             }
         }
         Ok(())
@@ -296,7 +296,7 @@ impl PendingUndo {
     pub fn report(&self) -> String {
         let mut res = String::new();
         let n = self.moves.len();
-        writeln!(res, "Would move {n} file(s):").expect("writing to a String cannot fail");
+        writeln!(res, "Would revert {n} file(s):").expect("writing to a String cannot fail");
 
         let mut counts: HashMap<String, usize> = HashMap::new();
         for mv in self.moves.iter() {

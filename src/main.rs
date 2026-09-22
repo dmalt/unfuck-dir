@@ -187,9 +187,9 @@ fn main() -> ExitCode {
 
     // TODO: refactor the section below
     let outcome = plan.execute();
-    // if args.verbose {
-    //     print!("{outcome}");
-    // }
+    if args.verbose {
+        print!("{outcome}");
+    }
     eprint!("{}", outcome.report());
     if let Some(state_dir) = unfk::undo::state_dir(consts::OS) {
         let undo_queue = PendingUndo::from(outcome);
