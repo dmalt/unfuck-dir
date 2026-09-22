@@ -11,6 +11,7 @@ use std::time::SystemTime;
 
 use crate::Move;
 use crate::RunOutcome;
+use crate::display_path;
 
 const STATE_DIRNAME: &str = "unfk";
 const UNDO_FNAME: &str = "undo.json";
@@ -52,7 +53,8 @@ impl FailedRmdir {
 
 impl fmt::Display for FailedRmdir {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Failed to remove {:?}: {}", self.folder, self.reason)
+        let folder = display_path(&self.folder);
+        write!(f, "Failed to remove {}: {}", folder, self.reason)
     }
 }
 
@@ -165,7 +167,7 @@ impl PendingUndo {
 impl fmt::Display for PendingUndo {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for folder in &self.folders {
-            writeln!(f, "[rmdir] {folder:?}")?;
+            writeln!(f, "[rmdir] {}", display_path(folder))?;
         }
         if !self.folders.is_empty() {
             writeln!(f)?;
@@ -249,16 +251,26 @@ impl UndoOutcome {
     }
 }
 
+fn fmt_folder(f: &mut fmt::Formatter, folder: &Result<FolderOutcome, FailedRmdir>) -> fmt::Result {
+    match folder {
+        Ok(outcome) => {
+            let folder = display_path(&outcome.folder);
+            match outcome.removal {
+                Removal::Success => writeln!(f, "[rmdir] {}", folder),
+                Removal::AlreadyGone => writeln!(f, "[rmdir] {} (already gone)", folder),
+            }
+        }
+        Err(fail) => {
+            let folder = display_path(&fail.folder);
+            writeln!(f, "[rmdir] {} FAILED: {}", folder, fail.reason)
+        }
+    }
+}
+
 impl fmt::Display for UndoOutcome {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for folder_res in &self.folders {
-            match folder_res {
-                Ok(fo) => match fo.removal {
-                    Removal::Success => writeln!(f, "[rmdir] {:?}", fo.folder)?,
-                    Removal::AlreadyGone => writeln!(f, "[rmdir] {:?} (already gone)", fo.folder)?,
-                },
-                Err(e) => writeln!(f, "[rmdir failed] {:?}: {}", e.folder, e.reason)?,
-            }
+            fmt_folder(f, folder_res)?;
         }
         if !self.folders.is_empty() {
             writeln!(f)?;
@@ -266,7 +278,7 @@ impl fmt::Display for UndoOutcome {
         for mv_res in &self.moves {
             match mv_res {
                 Ok(mv) => writeln!(f, "{}", mv)?,
-                Err(fail) => writeln!(f, "[mv failed] {}: {}", fail.reversal.mv, fail.reason)?,
+                Err(fail) => writeln!(f, "[mv] {} FAILED: {}", fail.reversal.mv, fail.reason)?,
             }
         }
         Ok(())

@@ -3,9 +3,9 @@ use std::env::consts;
 use std::io;
 use std::process::ExitCode;
 use std::{collections::HashMap, fs, path, process};
-use unfk::RunPlan;
 use unfk::undo::PendingUndo;
 use unfk::undo::{clear, save};
+use unfk::{RunPlan, display_path};
 
 #[derive(Parser)]
 #[command(name = "downloads-sorter")]
@@ -55,7 +55,7 @@ fn group_files(
     by: GroupMode,
 ) -> HashMap<String, Vec<path::PathBuf>> {
     let Ok(files) = fs::read_dir(dir_path) else {
-        eprintln!("Couldn't read directory {}", dir_path.display());
+        eprintln!("Couldn't read directory {}", display_path(dir_path));
         process::exit(1);
     };
     let files = files
@@ -127,7 +127,6 @@ fn undo(dry: bool, verbose: bool) -> ExitCode {
         eprintln!("Everything was reverted, but couldn't remove the undo log: {e}.");
         return ExitCode::FAILURE;
     }
-
 
     ExitCode::SUCCESS
 }

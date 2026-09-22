@@ -18,18 +18,20 @@ const FORMAT_MOVE_SEPARATOR: &str = " -> ";
 
 const MAX_DUPLICATES: u16 = 10000;
 
+pub fn display_path(p: &path::Path) -> String {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let mut p_short = p.display().to_string();
+    if !home.is_empty() && p_short.starts_with(&home) {
+        p_short = p_short.replacen(&home, "~", 1);
+    }
+    format!("\"{}\"", p_short)
+}
+
 /// Format the move report
 fn format_mv(from: &path::Path, to: &path::Path) -> String {
-    let home = std::env::var("HOME").unwrap_or_default();
-    let mut from_short = from.display().to_string();
-    if from_short.starts_with(&home) {
-        from_short = from_short.replacen(&home, "~", 1);
-    }
-    let mut to_short = to.display().to_string();
-    if to_short.starts_with(&home) {
-        to_short = to_short.replacen(&home, "~", 1);
-    }
-    format!("\"{}\"{FORMAT_MOVE_SEPARATOR}\"{}\"", from_short, to_short)
+    let from_short = display_path(from);
+    let to_short = display_path(to);
+    format!("{}{FORMAT_MOVE_SEPARATOR}{}", from_short, to_short)
 }
 
 fn try_increment_suffix(stem: &str) -> Option<(&str, u8)> {
@@ -92,11 +94,7 @@ impl FailedMove {
 
 impl fmt::Display for FailedMove {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Failed to move {:?} to {:?}: {}",
-            self.mv.src, self.mv.dst, self.reason
-        )
+        write!(f, "Failed to move {}: {}", self.mv, self.reason)
     }
 }
 
@@ -117,7 +115,8 @@ impl FailedMkdir {
 
 impl fmt::Display for FailedMkdir {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Failed to create {:?}: {}", self.folder, self.reason)
+        let folder = display_path(&self.folder);
+        write!(f, "Failed to create {}: {}", folder, self.reason)
     }
 }
 
@@ -203,12 +202,11 @@ impl fmt::Display for RunOutcome {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for folder_res in &self.folders {
             match folder_res {
-                Ok(folder) => writeln!(f, "[mkdir] {folder:?}")?,
-                Err(failed_mkdir) => writeln!(
-                    f,
-                    "[mkdir failed] {:?}: {}",
-                    failed_mkdir.folder, failed_mkdir.reason
-                )?,
+                Ok(folder) => writeln!(f, "[mkdir] {}", display_path(folder))?,
+                Err(failed_mkdir) => {
+                    let folder = display_path(&failed_mkdir.folder);
+                    writeln!(f, "[mkdir] {} FAILED: {}", folder, failed_mkdir.reason)?
+                }
             }
         }
         if !self.folders.is_empty() {
@@ -217,7 +215,7 @@ impl fmt::Display for RunOutcome {
         for mv_res in &self.moves {
             match mv_res {
                 Ok(mv) => writeln!(f, "{}", mv)?,
-                Err(fail) => writeln!(f, "[mv failed] {}: {}", fail.mv, fail.reason)?,
+                Err(fail) => writeln!(f, "[mv] {} FAILED: {}", fail.mv, fail.reason)?,
             }
         }
         Ok(())
@@ -268,7 +266,7 @@ impl RunPlan {
 impl fmt::Display for RunPlan {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for folder in &self.folders {
-            writeln!(f, "[mkdir] {folder:?}")?;
+            writeln!(f, "[mkdir] {}", display_path(folder))?;
         }
         if !self.folders.is_empty() {
             writeln!(f)?;
@@ -354,6 +352,42 @@ mod tests {
         fn rename_duplicate_stem_max_duplicate() {
             let res = rename_duplicate_stem("some_name__255");
             assert_eq!(res, "some_name__255__1");
+        }
+    }
+
+    mod display_path {
+        use crate::display_path;
+        use crate::temp_env::with_var;
+        use std::path::Path;
+
+        #[test]
+        fn path_unchanged_when_home_is_unset() {
+            with_var("HOME", None, || {
+                assert_eq!(display_path(Path::new("/etc/passwd")), "\"/etc/passwd\"");
+            });
+        }
+
+        #[test]
+        fn home_prefix_with_tilde() {
+            with_var("HOME", Some("/Users/test"), || {
+                let p = Path::new("/Users/test/Downloads/a.pdf");
+                assert_eq!(display_path(p), "\"~/Downloads/a.pdf\"");
+            });
+        }
+
+        #[test]
+        fn paths_outside_home_unchanged() {
+            with_var("HOME", Some("/Users/test"), || {
+                assert_eq!(display_path(Path::new("/etc/passwd")), "\"/etc/passwd\"");
+            });
+        }
+
+        #[test]
+        fn only_the_leading_home_occurrence() {
+            with_var("HOME", Some("/Users/test"), || {
+                let p = Path::new("/Users/test/backup/Users/test/a.pdf");
+                assert_eq!(display_path(p), "\"~/backup/Users/test/a.pdf\"");
+            });
         }
     }
 }
