@@ -62,24 +62,6 @@ fn rename_duplicate(dst: &path::Path) -> path::PathBuf {
     dst.with_file_name(new_name)
 }
 
-/// Plan folders creation to move the files into.
-/// Existing destination folders are not added to the plan.
-pub fn plan_folders(
-    files_grouping: &HashMap<String, Vec<path::PathBuf>>,
-    folder_to_organize: &path::Path,
-) -> Vec<path::PathBuf> {
-    let mut folder_path;
-    let mut folders_to_create: Vec<path::PathBuf> = Vec::new();
-    for dirname in files_grouping.keys() {
-        folder_path = folder_to_organize.join(dirname);
-
-        if !folder_path.exists() {
-            folders_to_create.push(folder_path);
-        }
-    }
-    folders_to_create
-}
-
 #[derive(Debug)]
 pub struct FailedMove {
     mv: Move,
@@ -158,11 +140,6 @@ impl fmt::Display for Move {
     }
 }
 
-pub struct RunOutcome {
-    pub moves: Vec<Result<Move, FailedMove>>,
-    pub folders: Vec<Result<path::PathBuf, FailedMkdir>>,
-}
-
 fn count_table<'a>(header: &str, categories: impl Iterator<Item = &'a str>) -> String {
     let mut total = 0usize;
     let mut counts: HashMap<&str, usize> = HashMap::new();
@@ -180,6 +157,11 @@ fn count_table<'a>(header: &str, categories: impl Iterator<Item = &'a str>) -> S
         writeln!(res, "  {k:<20} {v:>3}").expect("writing to a String cannot fail");
     }
     res
+}
+
+pub struct RunOutcome {
+    pub moves: Vec<Result<Move, FailedMove>>,
+    pub folders: Vec<Result<path::PathBuf, FailedMkdir>>,
 }
 
 impl RunOutcome {
@@ -228,6 +210,48 @@ impl fmt::Display for RunOutcome {
         }
         Ok(())
     }
+}
+
+fn plan_moves(
+    files_grouping: &HashMap<String, Vec<path::PathBuf>>,
+    folder_to_organize: &path::Path,
+) -> Vec<Move> {
+    let mut folder_path;
+    let mut moves: Vec<Move> = Vec::new();
+    for (dirname, group_files) in files_grouping {
+        folder_path = folder_to_organize.join(dirname);
+
+        for src in group_files {
+            let fname = src
+                .file_name()
+                .expect("must be a file path by construction");
+            let dst = make_nonexistent_dst(&folder_path, fname);
+            moves.push(Move {
+                src: src.clone(),
+                dst,
+                category: dirname.clone(),
+            });
+        }
+    }
+    moves
+}
+
+/// Plan folders creation to move the files into.
+/// Existing destination folders are not added to the plan.
+fn plan_folders(
+    files_grouping: &HashMap<String, Vec<path::PathBuf>>,
+    folder_to_organize: &path::Path,
+) -> Vec<path::PathBuf> {
+    let mut folder_path;
+    let mut folders_to_create: Vec<path::PathBuf> = Vec::new();
+    for dirname in files_grouping.keys() {
+        folder_path = folder_to_organize.join(dirname);
+
+        if !folder_path.exists() {
+            folders_to_create.push(folder_path);
+        }
+    }
+    folders_to_create
 }
 
 pub struct RunPlan {
@@ -285,30 +309,6 @@ fn make_nonexistent_dst(folder_path: &path::Path, fname: &ffi::OsStr) -> path::P
         panic!("exceeded {MAX_DUPLICATES} duplicates for {dst:?}");
     }
     dst
-}
-
-pub fn plan_moves(
-    files_grouping: &HashMap<String, Vec<path::PathBuf>>,
-    folder_to_organize: &path::Path,
-) -> Vec<Move> {
-    let mut folder_path;
-    let mut moves: Vec<Move> = Vec::new();
-    for (dirname, group_files) in files_grouping {
-        folder_path = folder_to_organize.join(dirname);
-
-        for src in group_files {
-            let fname = src
-                .file_name()
-                .expect("must be a file path by construction");
-            let dst = make_nonexistent_dst(&folder_path, fname);
-            moves.push(Move {
-                src: src.clone(),
-                dst,
-                category: dirname.clone(),
-            });
-        }
-    }
-    moves
 }
 
 /// Expand '~' char to the value of the HOME env variable
