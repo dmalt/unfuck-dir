@@ -11,7 +11,6 @@ use std::time::SystemTime;
 
 use crate::Move;
 use crate::RunOutcome;
-use crate::format_mv;
 
 const STATE_DIRNAME: &str = "unfk";
 const UNDO_FNAME: &str = "undo.json";
@@ -28,6 +27,12 @@ pub enum SkipReason {
 pub struct FailedUndoMove {
     pub mv: ReverseMove,
     pub reason: SkipReason,
+}
+
+impl fmt::Display for FailedUndoMove {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Failed to move {}: {}", self.mv.mv, self.reason)
+    }
 }
 
 #[derive(Debug)]
@@ -166,7 +171,7 @@ impl fmt::Display for PendingUndo {
             writeln!(f)?;
         }
         for cmv in &self.moves {
-            writeln!(f, "{}", format_mv(&cmv.mv.src, &cmv.mv.dst))?;
+            writeln!(f, "{}", cmv.mv)?;
         }
         Ok(())
     }
@@ -209,6 +214,39 @@ impl UndoOutcome {
             folders: pending_folders,
         })
     }
+
+    pub fn report(&self) -> String {
+        let mut res = String::new();
+        let n = self.moves.iter().filter(|x| x.is_ok()).count();
+        writeln!(res, "Moved {n} file(s):").expect("writing to a String cannot fail");
+
+        let mut counts: HashMap<String, usize> = HashMap::new();
+        for mv in self.moves.iter().filter_map(|m| m.as_ref().ok()) {
+            *counts.entry(mv.category.clone()).or_default() += 1;
+        }
+
+        let mut sorted: Vec<_> = counts.into_iter().collect();
+        sorted.sort_by(|(k1, c1), (k2, c2)| c2.cmp(c1).then(k1.cmp(k2)));
+        for (k, v) in sorted.iter() {
+            writeln!(res, "  {k:<20} {v:>3}").expect("writing to a String cannot fail");
+        }
+        let folder_errors: Vec<_> = self
+            .folders
+            .iter()
+            .filter_map(|r| r.as_ref().err())
+            .collect();
+        let move_errors: Vec<_> = self.moves.iter().filter_map(|r| r.as_ref().err()).collect();
+        if !folder_errors.is_empty() || !move_errors.is_empty() {
+            writeln!(res, "\nERRORS:").expect("writing to a String cannot fail");
+            for e in folder_errors {
+                writeln!(res, "{e}").expect("writing to a String cannot fail");
+            }
+            for e in move_errors {
+                writeln!(res, "{e}").expect("writing to a String cannot fail");
+            }
+        }
+        res
+    }
 }
 
 impl fmt::Display for UndoOutcome {
@@ -224,13 +262,8 @@ impl fmt::Display for UndoOutcome {
         }
         for mv_res in &self.moves {
             match mv_res {
-                Ok(mv) => writeln!(f, "{}", format_mv(&mv.src, &mv.dst))?,
-                Err(fumv) => writeln!(
-                    f,
-                    "move failed: {}: {}",
-                    format_mv(&fumv.mv.mv.dst, &fumv.mv.mv.src),
-                    fumv.reason
-                )?,
+                Ok(mv) => writeln!(f, "{}", mv)?,
+                Err(fumv) => writeln!(f, "move failed: {}: {}", fumv.mv.mv, fumv.reason)?,
             }
         }
         Ok(())

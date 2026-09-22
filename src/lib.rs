@@ -19,7 +19,7 @@ const FORMAT_MOVE_SEPARATOR: &str = " -> ";
 const MAX_DUPLICATES: u16 = 10000;
 
 /// Format the move report
-pub fn format_mv(from: &path::Path, to: &path::Path) -> String {
+fn format_mv(from: &path::Path, to: &path::Path) -> String {
     let home = std::env::var("HOME").unwrap_or_default();
     let mut from_short = from.display().to_string();
     if from_short.starts_with(&home) {
@@ -144,17 +144,18 @@ impl Move {
 
     pub fn execute(self) -> Result<Move, FailedMove> {
         fs::rename(&self.src, &self.dst).map_err(|e| FailedMove::new(self.clone(), e))?;
-        // let fi = read_identity(&self.dst);
-        // let move_record = CompletedMove {
-        //     mv: self,
-        //     identity: fi,
-        // };
         Ok(self)
     }
 
     pub fn undo(self) -> Result<Move, FailedMove> {
         fs::rename(&self.dst, &self.src).map_err(|e| FailedMove::new(self.flip(), e))?;
         Ok(self)
+    }
+}
+
+impl fmt::Display for Move {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", format_mv(&self.src, &self.dst))
     }
 }
 
@@ -248,7 +249,7 @@ impl fmt::Display for RunPlan {
             writeln!(f)?;
         }
         for mv in &self.moves {
-            writeln!(f, "{}", format_mv(&mv.src, &mv.dst))?;
+            writeln!(f, "{}", mv)?;
         }
         Ok(())
     }
