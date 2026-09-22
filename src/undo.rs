@@ -1,7 +1,6 @@
 use std::env;
 use std::fs;
-use std::io;
-use std::io::ErrorKind;
+use std::io::{self, ErrorKind};
 use std::path;
 use std::time::SystemTime;
 
@@ -75,22 +74,10 @@ impl fmt::Display for SkipReason {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-pub struct PendingUndo {
-    moves: Vec<ReverseMove>,
-    folders: Vec<path::PathBuf>,
-}
-
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 struct FileIdentity {
     pub mtime: Option<SystemTime>,
     pub size_bytes: u64,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
-pub struct ReverseMove {
-    mv: Move,
-    identity: Option<FileIdentity>,
 }
 
 fn identity_matches(stored: &FileIdentity, actual: &FileIdentity) -> bool {
@@ -112,6 +99,12 @@ fn read_identity(p: &path::Path) -> Option<FileIdentity> {
         mtime: md.modified().ok(),
         size_bytes: md.len(),
     })
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
+pub struct ReverseMove {
+    mv: Move,
+    identity: Option<FileIdentity>,
 }
 
 impl ReverseMove {
@@ -145,6 +138,22 @@ impl ReverseMove {
     }
 }
 
+pub enum Removal {
+    Success,
+    AlreadyGone,
+}
+
+struct FolderOutcome {
+    pub folder: path::PathBuf,
+    removal: Removal,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+pub struct PendingUndo {
+    moves: Vec<ReverseMove>,
+    folders: Vec<path::PathBuf>,
+}
+
 impl fmt::Display for PendingUndo {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for reversal in &self.moves {
@@ -160,14 +169,42 @@ impl fmt::Display for PendingUndo {
     }
 }
 
-pub enum Removal {
-    Success,
-    AlreadyGone,
-}
+impl PendingUndo {
+    pub fn execute(self) -> UndoOutcome {
+        let moves: Vec<_> = self.moves.into_iter().map(|m| m.execute()).collect();
+        let mut folders: Vec<Result<FolderOutcome, FailedRmdir>> = Vec::new();
+        for folder in self.folders {
+            match fs::remove_dir(&folder) {
+                Err(reason) if reason.kind() == io::ErrorKind::NotFound => {
+                    let removal = Removal::AlreadyGone;
+                    folders.push(Ok(FolderOutcome { folder, removal }))
+                }
+                Ok(()) => {
+                    let removal = Removal::Success;
+                    folders.push(Ok(FolderOutcome { folder, removal }))
+                }
+                Err(e) => folders.push(Err(FailedRmdir::new(&folder, e))),
+            }
+        }
 
-struct FolderOutcome {
-    pub folder: path::PathBuf,
-    removal: Removal,
+        UndoOutcome { moves, folders }
+    }
+
+    pub fn report(&self) -> String {
+        let categories = self.moves.iter().map(|r| r.mv.category.as_str());
+        count_table("Would revert", categories)
+    }
+
+    pub fn capture(outcome: RunOutcome) -> Self {
+        let mut moves: Vec<ReverseMove> = Vec::new();
+        for mv in outcome.moves.into_iter().filter_map(Result::ok) {
+            moves.push(ReverseMove::capture(mv));
+        }
+        PendingUndo {
+            moves,
+            folders: outcome.folders.into_iter().filter_map(Result::ok).collect(),
+        }
+    }
 }
 
 pub struct UndoOutcome {
@@ -252,44 +289,6 @@ impl fmt::Display for UndoOutcome {
             fmt_folder(f, folder_res)?;
         }
         Ok(())
-    }
-}
-
-impl PendingUndo {
-    pub fn execute(self) -> UndoOutcome {
-        let moves: Vec<_> = self.moves.into_iter().map(|m| m.execute()).collect();
-        let mut folders: Vec<Result<FolderOutcome, FailedRmdir>> = Vec::new();
-        for folder in self.folders {
-            match fs::remove_dir(&folder) {
-                Err(reason) if reason.kind() == io::ErrorKind::NotFound => {
-                    let removal = Removal::AlreadyGone;
-                    folders.push(Ok(FolderOutcome { folder, removal }))
-                }
-                Ok(()) => {
-                    let removal = Removal::Success;
-                    folders.push(Ok(FolderOutcome { folder, removal }))
-                }
-                Err(e) => folders.push(Err(FailedRmdir::new(&folder, e))),
-            }
-        }
-
-        UndoOutcome { moves, folders }
-    }
-
-    pub fn report(&self) -> String {
-        let categories = self.moves.iter().map(|r| r.mv.category.as_str());
-        count_table("Would revert", categories)
-    }
-
-    pub fn capture(outcome: RunOutcome) -> Self {
-        let mut moves: Vec<ReverseMove> = Vec::new();
-        for mv in outcome.moves.into_iter().filter_map(Result::ok) {
-            moves.push(ReverseMove::capture(mv));
-        }
-        PendingUndo {
-            moves,
-            folders: outcome.folders.into_iter().filter_map(Result::ok).collect(),
-        }
     }
 }
 

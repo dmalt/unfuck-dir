@@ -18,6 +18,15 @@ const FORMAT_MOVE_SEPARATOR: &str = " -> ";
 
 const MAX_DUPLICATES: u16 = 10000;
 
+/// Expand '~' char to the value of the HOME env variable
+pub fn maybe_expand_tilde(path: &str) -> Result<path::PathBuf, env::VarError> {
+    if !path.starts_with("~") {
+        return Ok(path::PathBuf::from(path));
+    }
+    let home = std::env::var("HOME")?;
+    Ok(path::PathBuf::from(path.replacen("~", &home, 1)))
+}
+
 pub fn display_path(p: &path::Path) -> String {
     let home = std::env::var("HOME").unwrap_or_default();
     let mut p_short = p.display().to_string();
@@ -212,6 +221,20 @@ impl fmt::Display for RunOutcome {
     }
 }
 
+fn make_nonexistent_dst(folder_path: &path::Path, fname: &ffi::OsStr) -> path::PathBuf {
+    let mut dst = folder_path.join(fname);
+    for _ in 0..MAX_DUPLICATES {
+        if !dst.exists() {
+            break;
+        }
+        dst = rename_duplicate(&dst);
+    }
+    if dst.exists() {
+        panic!("exceeded {MAX_DUPLICATES} duplicates for {dst:?}");
+    }
+    dst
+}
+
 fn plan_moves(
     files_grouping: &HashMap<String, Vec<path::PathBuf>>,
     folder_to_organize: &path::Path,
@@ -295,29 +318,6 @@ impl fmt::Display for RunPlan {
         }
         Ok(())
     }
-}
-
-fn make_nonexistent_dst(folder_path: &path::Path, fname: &ffi::OsStr) -> path::PathBuf {
-    let mut dst = folder_path.join(fname);
-    for _ in 0..MAX_DUPLICATES {
-        if !dst.exists() {
-            break;
-        }
-        dst = rename_duplicate(&dst);
-    }
-    if dst.exists() {
-        panic!("exceeded {MAX_DUPLICATES} duplicates for {dst:?}");
-    }
-    dst
-}
-
-/// Expand '~' char to the value of the HOME env variable
-pub fn maybe_expand_tilde(path: &str) -> Result<path::PathBuf, env::VarError> {
-    if !path.starts_with("~") {
-        return Ok(path::PathBuf::from(path));
-    }
-    let home = std::env::var("HOME")?;
-    Ok(path::PathBuf::from(path.replacen("~", &home, 1)))
 }
 
 #[cfg(test)]
