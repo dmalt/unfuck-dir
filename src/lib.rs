@@ -80,48 +80,50 @@ pub fn plan_folders(
 }
 
 #[derive(Debug)]
-pub enum UnfkError {
-    Move {
-        mv: Move,
-        source: io::Error,
-    },
-    CreateFolder {
-        path: path::PathBuf,
-        source: io::Error,
-    },
+pub struct FailedMove {
+    mv: Move,
+    source: io::Error,
 }
 
-impl UnfkError {
-    fn create_folder_failed(path: &path::Path, source: io::Error) -> Self {
-        Self::CreateFolder {
+impl FailedMove {
+    pub fn new(mv: Move, source: io::Error) -> Self {
+        FailedMove { mv, source }
+    }
+}
+
+impl fmt::Display for FailedMove {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Failed to move {:?} to {:?}: {}",
+            self.mv.src, self.mv.dst, self.source
+        )
+    }
+}
+
+#[derive(Debug)]
+pub struct FailedMkdir {
+    path: path::PathBuf,
+    source: io::Error,
+}
+
+impl FailedMkdir {
+    pub fn new(path: &path::Path, source: io::Error) -> Self {
+        FailedMkdir {
             path: path.to_path_buf(),
             source,
         }
     }
-
-    fn move_failed(mv: &Move, source: io::Error) -> Self {
-        Self::Move {
-            mv: mv.clone(),
-            source,
-        }
-    }
 }
 
-impl fmt::Display for UnfkError {
+impl fmt::Display for FailedMkdir {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Move { mv, source } => {
-                write!(f, "Failed to move {:?} to {:?}: {source}", mv.src, mv.dst)
-            }
-            Self::CreateFolder { path, source } => {
-                write!(f, "Failed to create {path:?}: {source}")
-            }
-        }
+        write!(f, "Failed to create {:?}: {}", self.path, self.source)
     }
 }
 
-pub fn create_folder(folder: path::PathBuf) -> Result<path::PathBuf, UnfkError> {
-    fs::create_dir(&folder).map_err(|e| UnfkError::create_folder_failed(&folder, e))?;
+pub fn create_folder(folder: path::PathBuf) -> Result<path::PathBuf, FailedMkdir> {
+    fs::create_dir(&folder).map_err(|e| FailedMkdir::new(&folder, e))?;
     Ok(folder)
 }
 
@@ -132,22 +134,192 @@ pub struct Move {
     pub category: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+impl Move {
+    pub fn flip(&self) -> Self {
+        Move {
+            src: self.dst.clone(),
+            dst: self.src.clone(),
+            category: self.category.clone(),
+        }
+    }
+
+    pub fn execute(self) -> Result<CompletedMove, FailedMove> {
+        fs::rename(&self.src, &self.dst).map_err(|e| FailedMove::new(self.clone(), e))?;
+        let fi = read_identity(&self.dst);
+        let move_record = CompletedMove {
+            mv: self,
+            identity: fi,
+        };
+        Ok(move_record)
+    }
+
+    pub fn undo(self) -> Result<Move, FailedMove> {
+        fs::rename(&self.dst, &self.src).map_err(|e| FailedMove::new(self.flip(), e))?;
+        Ok(self)
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub struct FileIdentity {
     pub mtime: Option<SystemTime>,
     pub size_bytes: u64,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub struct CompletedMove {
     pub mv: Move,
     pub identity: Option<FileIdentity>,
+}
+
+#[derive(Debug)]
+pub enum SkipReason {
+    SourceOccupied,
+    DestinationMissing,
+    IdentityMismatch,
+    MoveFailure(io::Error),
+}
+
+#[derive(Debug)]
+pub struct FailedUndoMove {
+    pub mv: CompletedMove,
+    pub reason: SkipReason,
+}
+
+#[derive(Debug)]
+pub struct FailedRmdir {
+    pub path: path::PathBuf,
+    source: io::Error,
+}
+
+impl FailedRmdir {
+    pub fn new(path: &path::Path, source: io::Error) -> Self {
+        FailedRmdir {
+            path: path.to_path_buf(),
+            source,
+        }
+    }
+}
+
+impl fmt::Display for FailedRmdir {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Failed to remove {:?}: {}", self.path, self.source)
+    }
+}
+
+impl fmt::Display for SkipReason {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::SourceOccupied => f.write_str("something is already at the original location"),
+            Self::DestinationMissing => f.write_str("the file is no longer there"),
+            Self::IdentityMismatch => f.write_str("the file has changed since it was moved"),
+            Self::MoveFailure(e) => write!(f, "could not move it back: {e}"),
+        }
+    }
+}
+
+impl CompletedMove {
+    pub fn undo(&self) -> Result<Move, FailedUndoMove> {
+        if !self.mv.dst.exists() {
+            return Err(FailedUndoMove {
+                mv: self.clone(),
+                reason: SkipReason::DestinationMissing,
+            });
+        }
+
+        if self.mv.src.exists() {
+            return Err(FailedUndoMove {
+                mv: self.clone(),
+                reason: SkipReason::SourceOccupied,
+            });
+        }
+
+        let dst_fi = read_identity(&self.mv.dst);
+        if let Some(actual_fi) = &dst_fi
+            && let Some(stored_fi) = &self.identity
+            && !identity_matches(stored_fi, actual_fi)
+        {
+            return Err(FailedUndoMove {
+                mv: self.clone(),
+                reason: SkipReason::IdentityMismatch,
+            });
+        }
+        if let Err(e) = fs::rename(&self.mv.dst, &self.mv.src) {
+            return Err(FailedUndoMove {
+                mv: self.clone(),
+                reason: SkipReason::MoveFailure(e),
+            });
+        }
+        Ok(self.mv.flip())
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct PendingUndo {
     pub moves: Vec<CompletedMove>,
     pub folders: Vec<path::PathBuf>,
+}
+
+pub enum FolderOutcomeType {
+    SuccessfullyRemoved,
+    AlreadyGone,
+}
+
+pub struct FolderOutcome {
+    pub folder: path::PathBuf,
+    pub outcome_type: FolderOutcomeType,
+}
+
+pub struct UndoOutcome {
+    pub moves: Vec<Result<Move, FailedUndoMove>>,
+    pub folders: Vec<Result<FolderOutcome, FailedRmdir>>,
+}
+
+impl UndoOutcome {
+    pub fn failed(&self) -> Option<PendingUndo> {
+        let pending_moves: Vec<_> = self
+            .moves
+            .iter()
+            .filter_map(|x| x.as_ref().err())
+            .map(|x| x.mv.clone())
+            .collect();
+        let pending_folders: Vec<path::PathBuf> = self
+            .folders
+            .iter()
+            .filter_map(|x| x.as_ref().err())
+            .map(|x| x.path.clone())
+            .collect();
+        if pending_moves.is_empty() || pending_folders.is_empty() {
+            return None;
+        }
+        Some(PendingUndo {
+            moves: pending_moves,
+            folders: pending_folders,
+        })
+    }
+}
+
+impl PendingUndo {
+    pub fn execute(self) -> UndoOutcome {
+        let moves: Vec<_> = self.moves.iter().map(|e| e.undo()).collect();
+        let mut folders: Vec<Result<FolderOutcome, FailedRmdir>> = Vec::new();
+        for folder in self.folders {
+            match fs::remove_dir(&folder) {
+                Err(reason) if reason.kind() == io::ErrorKind::NotFound => {
+                    folders.push(Ok(FolderOutcome {
+                        folder,
+                        outcome_type: FolderOutcomeType::AlreadyGone,
+                    }))
+                }
+                Ok(()) => folders.push(Ok(FolderOutcome {
+                    folder,
+                    outcome_type: FolderOutcomeType::SuccessfullyRemoved,
+                })),
+                Err(e) => folders.push(Err(FailedRmdir::new(&folder, e))),
+            }
+        }
+
+        UndoOutcome { moves, folders }
+    }
 }
 
 fn make_nonexistent_dst(folder_path: &path::Path, fname: &ffi::OsStr) -> path::PathBuf {
@@ -195,32 +367,6 @@ fn read_identity(p: &path::Path) -> Option<FileIdentity> {
     })
 }
 
-pub fn perform_move(mv: Move) -> Result<CompletedMove, UnfkError> {
-    fs::rename(&mv.src, &mv.dst).map_err(|e| UnfkError::move_failed(&mv, e))?;
-    let fi = read_identity(&mv.dst);
-    let move_record = CompletedMove { mv, identity: fi };
-    Ok(move_record)
-}
-
-#[derive(Debug)]
-pub enum SkipReason {
-    SourceOccupied,
-    DestinationMissing,
-    IdentityMismatch,
-    MoveFailure(io::Error),
-}
-
-impl fmt::Display for SkipReason {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::SourceOccupied => f.write_str("something is already at the original location"),
-            Self::DestinationMissing => f.write_str("the file is no longer there"),
-            Self::IdentityMismatch => f.write_str("the file has changed since it was moved"),
-            Self::MoveFailure(e) => write!(f, "could not move it back: {e}"),
-        }
-    }
-}
-
 fn identity_matches(stored: &FileIdentity, actual: &FileIdentity) -> bool {
     if stored.size_bytes != actual.size_bytes {
         return false;
@@ -233,30 +379,6 @@ fn identity_matches(stored: &FileIdentity, actual: &FileIdentity) -> bool {
     }
 
     true
-}
-
-pub fn check_undo(rec: &CompletedMove) -> Result<(), SkipReason> {
-    if !rec.mv.dst.exists() {
-        return Err(SkipReason::DestinationMissing);
-    }
-
-    if rec.mv.src.exists() {
-        return Err(SkipReason::SourceOccupied);
-    }
-
-    let dst_fi = read_identity(&rec.mv.dst);
-    if let Some(actual_fi) = &dst_fi
-        && let Some(stored_fi) = &rec.identity
-        && !identity_matches(stored_fi, actual_fi)
-    {
-        return Err(SkipReason::IdentityMismatch);
-    }
-    Ok(())
-}
-
-pub fn undo_move(rec: &CompletedMove) -> Result<(), SkipReason> {
-    check_undo(rec)?;
-    fs::rename(&rec.mv.dst, &rec.mv.src).map_err(SkipReason::MoveFailure)
 }
 
 /// Expand '~' char to the value of the HOME env variable
@@ -272,7 +394,7 @@ pub fn maybe_expand_tilde(path: &str) -> Result<path::PathBuf, env::VarError> {
 mod tests {
     use std::{fs, path::Path};
 
-    use crate::{CompletedMove, Move, perform_move};
+    use crate::{CompletedMove, Move};
 
     // use super::*;
 
@@ -364,14 +486,14 @@ mod tests {
         fs::create_dir(&cat_dir).unwrap();
         let dst = cat_dir.join("a.pdf");
         let mv = Move { src, dst, category };
-        perform_move(mv).unwrap()
+        mv.execute().unwrap()
     }
 
     mod check_undo {
         use tempfile::tempdir;
 
         use super::setup_moved_file;
-        use crate::{SkipReason, check_undo};
+        use crate::{FailedUndoMove, SkipReason};
         use std::fs;
 
         #[test]
@@ -381,7 +503,7 @@ mod tests {
 
             assert!(rec.mv.dst.exists());
             assert!(!rec.mv.src.exists());
-            assert!(check_undo(&rec).is_ok());
+            assert!(rec.mv.undo().is_ok());
         }
 
         #[test]
@@ -390,10 +512,18 @@ mod tests {
             let rec = setup_moved_file(tmp.path());
             fs::remove_file(&rec.mv.dst).unwrap();
 
-            let res = check_undo(&rec);
+            let res = rec.undo();
+
+            assert!(res.is_err());
 
             assert!(
-                matches!(res, Err(SkipReason::DestinationMissing)),
+                matches!(
+                    res,
+                    Err(FailedUndoMove {
+                        reason: SkipReason::DestinationMissing,
+                        ..
+                    })
+                ),
                 "expected DestinationMissing, got {res:?}"
             );
         }
@@ -405,10 +535,16 @@ mod tests {
             let content_before = b"goodbye world";
             fs::write(&rec.mv.src, content_before).unwrap();
 
-            let res = check_undo(&rec);
+            let res = rec.undo();
 
             assert!(
-                matches!(res, Err(SkipReason::SourceOccupied)),
+                matches!(
+                    res,
+                    Err(FailedUndoMove {
+                        reason: SkipReason::SourceOccupied,
+                        ..
+                    })
+                ),
                 "expected SourceOccupied, got {res:?}"
             );
         }
@@ -420,10 +556,16 @@ mod tests {
             let content_before = b"goodbye world";
             fs::write(&rec.mv.dst, content_before).unwrap();
 
-            let res = check_undo(&rec);
+            let res = rec.undo();
 
             assert!(
-                matches!(res, Err(SkipReason::IdentityMismatch)),
+                matches!(
+                    res,
+                    Err(FailedUndoMove {
+                        reason: SkipReason::IdentityMismatch,
+                        ..
+                    })
+                ),
                 "expected IdentityMismatch, got {res:?}"
             );
         }
@@ -436,7 +578,7 @@ mod tests {
             let content_before = b"goodbye world";
             fs::write(&rec.mv.dst, content_before).unwrap();
 
-            assert!(check_undo(&rec).is_ok());
+            assert!(rec.undo().is_ok());
         }
     }
 
@@ -446,7 +588,9 @@ mod tests {
         use tempfile::tempdir;
 
         use super::setup_moved_file;
-        use crate::{SkipReason, undo_move};
+        #[cfg(unix)]
+        use crate::FailedUndoMove;
+        use crate::SkipReason;
 
         #[cfg(unix)]
         use std::os::unix::fs::PermissionsExt;
@@ -458,7 +602,7 @@ mod tests {
 
             assert!(rec.mv.dst.exists());
             assert!(!rec.mv.src.exists());
-            undo_move(&rec).unwrap();
+            rec.undo().unwrap();
 
             assert!(!rec.mv.dst.exists());
             assert!(rec.mv.src.exists());
@@ -472,7 +616,7 @@ mod tests {
             let content_before = b"goodbye world";
             fs::write(&rec.mv.src, content_before).unwrap();
 
-            let res = undo_move(&rec);
+            let res = rec.undo();
 
             assert!(res.is_err(), "Should produce error, got {res:?}");
             assert!(
@@ -493,12 +637,18 @@ mod tests {
             let rec = setup_moved_file(tmp.path());
 
             fs::set_permissions(tmp.path(), fs::Permissions::from_mode(0o555)).unwrap();
-            let res = undo_move(&rec);
+            let res = rec.undo();
             // restore the perms so that Drop can remove the tempdir
             fs::set_permissions(tmp.path(), fs::Permissions::from_mode(0o755)).unwrap();
 
             assert!(
-                matches!(res, Err(SkipReason::MoveFailure(_))),
+                matches!(
+                    res,
+                    Err(FailedUndoMove {
+                        reason: SkipReason::MoveFailure(_),
+                        ..
+                    })
+                ),
                 "Expected 'MoveFailure' got {res:?}"
             );
         }
