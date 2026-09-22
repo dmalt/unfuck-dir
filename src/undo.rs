@@ -292,15 +292,13 @@ impl PendingUndo {
         for folder in self.folders {
             match fs::remove_dir(&folder) {
                 Err(reason) if reason.kind() == io::ErrorKind::NotFound => {
-                    folders.push(Ok(FolderOutcome {
-                        folder,
-                        removal: Removal::AlreadyGone,
-                    }))
+                    let removal = Removal::AlreadyGone;
+                    folders.push(Ok(FolderOutcome { folder, removal }))
                 }
-                Ok(()) => folders.push(Ok(FolderOutcome {
-                    folder,
-                    removal: Removal::Success,
-                })),
+                Ok(()) => {
+                    let removal = Removal::Success;
+                    folders.push(Ok(FolderOutcome { folder, removal }))
+                }
                 Err(e) => folders.push(Err(FailedRmdir::new(&folder, e))),
             }
         }
