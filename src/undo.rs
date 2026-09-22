@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::io;
@@ -11,6 +10,7 @@ use std::time::SystemTime;
 
 use crate::Move;
 use crate::RunOutcome;
+use crate::count_table;
 use crate::display_path;
 
 const STATE_DIRNAME: &str = "unfk";
@@ -218,20 +218,9 @@ impl UndoOutcome {
     }
 
     pub fn report(&self) -> String {
-        let mut res = String::new();
-        let n = self.moves.iter().filter(|x| x.is_ok()).count();
-        writeln!(res, "Reverted {n} file(s):").expect("writing to a String cannot fail");
+        let moves = self.moves.iter().filter_map(|x| x.as_ref().ok());
+        let mut res = count_table("Reverted", moves.map(|mv| mv.category.as_str()));
 
-        let mut counts: HashMap<String, usize> = HashMap::new();
-        for mv in self.moves.iter().filter_map(|m| m.as_ref().ok()) {
-            *counts.entry(mv.category.clone()).or_default() += 1;
-        }
-
-        let mut sorted: Vec<_> = counts.into_iter().collect();
-        sorted.sort_by(|(k1, c1), (k2, c2)| c2.cmp(c1).then(k1.cmp(k2)));
-        for (k, v) in sorted.iter() {
-            writeln!(res, "  {k:<20} {v:>3}").expect("writing to a String cannot fail");
-        }
         let folder_errors: Vec<_> = self
             .folders
             .iter()
@@ -240,10 +229,10 @@ impl UndoOutcome {
         let move_errors: Vec<_> = self.moves.iter().filter_map(|r| r.as_ref().err()).collect();
         if !folder_errors.is_empty() || !move_errors.is_empty() {
             writeln!(res, "\nERRORS:").expect("writing to a String cannot fail");
-            for e in folder_errors {
+            for e in move_errors {
                 writeln!(res, "{e}").expect("writing to a String cannot fail");
             }
-            for e in move_errors {
+            for e in folder_errors {
                 writeln!(res, "{e}").expect("writing to a String cannot fail");
             }
         }
@@ -307,23 +296,11 @@ impl PendingUndo {
     }
 
     pub fn report(&self) -> String {
-        let mut res = String::new();
-        let n = self.moves.len();
-        writeln!(res, "Would revert {n} file(s):").expect("writing to a String cannot fail");
-
-        let mut counts: HashMap<String, usize> = HashMap::new();
-        for mv in self.moves.iter() {
-            *counts.entry(mv.mv.category.clone()).or_default() += 1;
-        }
-
-        let mut sorted: Vec<_> = counts.into_iter().collect();
-        sorted.sort_by(|(k1, c1), (k2, c2)| c2.cmp(c1).then(k1.cmp(k2)));
-        for (k, v) in sorted.iter() {
-            writeln!(res, "  {k:<20} {v:>3}").expect("writing to a String cannot fail");
-        }
-        res
+        let categories = self.moves.iter().map(|r| r.mv.category.as_str());
+        count_table("Would revert", categories)
     }
 }
+
 /// Returns the OS-specific directory for storing unfk's state files.
 ///
 /// # Arguments
