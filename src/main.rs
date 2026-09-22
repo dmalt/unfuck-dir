@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::{collections::HashMap, fs, path, process};
 use unfk::history::{clear, save};
-use unfk::{CompletedMove, Move, PendingUndo, UnfkError, check_undo, undo_move};
+use unfk::{CompletedMove, Move, PendingUndo};
 
 #[derive(Parser)]
 #[command(name = "downloads-sorter")]
@@ -88,7 +88,7 @@ fn undo(dry: bool) -> ExitCode {
         eprintln!("Could not determine the state directory");
         return ExitCode::FAILURE;
     };
-    let undo_record = match unfk::history::load(&state_dir) {
+    let undo_plan = match unfk::history::load(&state_dir) {
         Err(e) if e.kind() == io::ErrorKind::NotFound => {
             eprintln!("Nothing to undo!");
             return ExitCode::SUCCESS;
@@ -101,59 +101,52 @@ fn undo(dry: bool) -> ExitCode {
             eprintln!("{e}");
             return ExitCode::FAILURE;
         }
-        Ok(undo_record) => undo_record,
+        Ok(undo_plan) => undo_plan,
     };
 
-    let mut unresolved_moves: Vec<CompletedMove> = Vec::new();
-    let mut unresolved_folders: Vec<PathBuf> = Vec::new();
+    // n = total moves
+    // plan.check() -> good moves, bad moves + reason
+    //
+    // if dry: cumulative report; if verbose, report the individual fails and good moves
+    // actual_undo_moves(good_moves) -> bad_moves + reason
+    // merge bad moves from check and the actual undo
+    // if there are any bad moves, overwrite the undo log
+    // report the overall thing; if verbose; show the individual moves and fails
+
+    // eprintln!("Would skip {}: {reason}", rec.mv.dst.display());
+    // let mut moves_result: Vec<Result<CompletedMove, (CompletedMove, SkipReason)>> = Vec::new();
+    // for rec in undo_plan.moves {
+    //     match rec.check_undo() {
+    //         Err(reason) => moves_result.push(Err((rec, reason))),
+    //         Ok(()) => moves_result.push(Ok(rec)),
+    //     }
+    // }
 
     if dry {
-        for rec in undo_record.moves {
-            if let Err(reason) = check_undo(&rec) {
-                eprintln!("Would skip {}: {reason}", rec.mv.dst.display());
-                unresolved_moves.push(rec);
-            }
-        }
-    } else {
-        for rec in undo_record.moves {
-            if let Err(reason) = undo_move(&rec) {
-                eprintln!("Skipping {}: {reason}", rec.mv.dst.display());
-                unresolved_moves.push(rec);
-            }
-        }
+        // TODO:
+        // report_dry(&unresolved_moves, &good_moves);
+        // eprintln!("Would skip {}: {reason}", rec.mv.dst.display());
+        return ExitCode::SUCCESS;
+    }
+    let undo_outcome = undo_plan.execute();
 
-        for folder in undo_record.folders {
-            if let Err(reason) = fs::remove_dir(&folder) {
-                if reason.kind() == io::ErrorKind::NotFound {
-                    eprintln!("{folder:?} was already removed");
-                } else {
-                    eprintln!("Skipping {folder:?}: {reason}");
-                    unresolved_folders.push(folder);
-                }
-            }
-        }
-
-        if !(unresolved_moves.is_empty() && unresolved_folders.is_empty()) {
-            eprintln!("Some entries could not be reverted and remain queued for the next --undo.");
-            let undo_rec = PendingUndo {
-                moves: unresolved_moves,
-                folders: unresolved_folders,
-            };
-            if let Err(e) = save(&undo_rec, &state_dir) {
-                eprintln!("Failed to write the undo log for the failed undos: {e}.");
-                return ExitCode::FAILURE;
-            }
-        } else if let Err(e) = clear(&state_dir) {
-            eprintln!("Everything was reverted, but couldn't remove the undo log: {e}.");
+    if let Some(undo_rec) = undo_outcome.failed() {
+        eprintln!("Some entries could not be reverted and remain queued for the next --undo.");
+        if let Err(e) = save(&undo_rec, &state_dir) {
+            eprintln!("Failed to write the undo log for the failed undos: {e}.");
             return ExitCode::FAILURE;
         }
+    } else if let Err(e) = clear(&state_dir) {
+        eprintln!("Everything was reverted, but couldn't remove the undo log: {e}.");
+        return ExitCode::FAILURE;
     }
+
     ExitCode::SUCCESS
 }
 
 struct RunOutcome {
-    moves: Vec<Result<CompletedMove, UnfkError>>,
-    folders: Vec<Result<PathBuf, UnfkError>>,
+    moves: Vec<Result<CompletedMove, unfk::FailedMove>>,
+    folders: Vec<Result<PathBuf, unfk::FailedMkdir>>,
 }
 
 impl RunOutcome {
@@ -172,15 +165,18 @@ impl RunOutcome {
         for (k, v) in sorted.iter() {
             writeln!(res, "  {k:<20} {v:>3}").expect("writing to a String cannot fail");
         }
-        let errors: Vec<&UnfkError> = self
+        let folder_errors: Vec<_> = self
             .folders
             .iter()
             .filter_map(|r| r.as_ref().err())
-            .chain(self.moves.iter().filter_map(|r| r.as_ref().err()))
             .collect();
-        if !errors.is_empty() {
+        let move_errors: Vec<_> = self.moves.iter().filter_map(|r| r.as_ref().err()).collect();
+        if !folder_errors.is_empty() || !move_errors.is_empty() {
             writeln!(res, "\nERRORS:").expect("writing to a String cannot fail");
-            for e in errors {
+            for e in folder_errors {
+                writeln!(res, "{e}").expect("writing to a String cannot fail");
+            }
+            for e in move_errors {
                 writeln!(res, "{e}").expect("writing to a String cannot fail");
             }
         }
@@ -195,21 +191,21 @@ impl RunOutcome {
     }
 }
 
-struct Plan {
+struct RunPlan {
     moves: Vec<Move>,
     folders: Vec<PathBuf>,
 }
 
-impl Plan {
+impl RunPlan {
     pub fn make(files_grouping: &HashMap<String, Vec<path::PathBuf>>, path: &path::Path) -> Self {
         let folders = unfk::plan_folders(files_grouping, path);
         let moves = unfk::plan_moves(files_grouping, path);
-        Plan { folders, moves }
+        RunPlan { folders, moves }
     }
 
     pub fn execute(self) -> RunOutcome {
         let folder_results: Vec<_> = self.folders.into_iter().map(unfk::create_folder).collect();
-        let move_results: Vec<_> = self.moves.into_iter().map(unfk::perform_move).collect();
+        let move_results: Vec<_> = self.moves.into_iter().map(|m| m.execute()).collect();
 
         RunOutcome {
             moves: move_results,
@@ -236,7 +232,7 @@ impl Plan {
     }
 }
 
-impl fmt::Display for Plan {
+impl fmt::Display for RunPlan {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for folder in &self.folders {
             writeln!(f, "[mkdir] {folder:?}")?;
@@ -276,8 +272,9 @@ fn main() -> ExitCode {
     };
     let files_grouping = group_files(&path, args.include_dotfiles, args.by);
 
-    let plan = Plan::make(&files_grouping, &path);
+    let plan = RunPlan::make(&files_grouping, &path);
     if args.verbose {
+        // TODO: print executed version for the non-dry run
         print!("{plan}");
     }
 
@@ -308,12 +305,10 @@ fn main() -> ExitCode {
 mod tests {
     use std::path::PathBuf;
 
-    use unfk::Move;
-
     use super::*;
     use std::io;
 
-    fn ok_move(src: &str, cat: &str) -> Result<CompletedMove, UnfkError> {
+    fn ok_move(src: &str, cat: &str) -> Result<CompletedMove, unfk::FailedMove> {
         let dst = src.replace("src", "dst");
         let mv = Move {
             src: PathBuf::from(src),
@@ -323,7 +318,7 @@ mod tests {
         Ok(CompletedMove { mv, identity: None })
     }
 
-    fn fail_move(src: &str, cat: &str) -> Result<CompletedMove, UnfkError> {
+    fn fail_move(src: &str, cat: &str) -> Result<CompletedMove, unfk::FailedMove> {
         let dst = src.replace("src", "dst");
         let mv = Move {
             src: PathBuf::from(src),
@@ -331,7 +326,7 @@ mod tests {
             category: String::from(cat),
         };
         let source = io::Error::new(io::ErrorKind::NotFound, "test_error");
-        Err(UnfkError::Move { mv, source })
+        Err(unfk::FailedMove::new(mv, source))
     }
 
     #[test]
