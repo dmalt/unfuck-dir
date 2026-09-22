@@ -177,14 +177,14 @@ impl fmt::Display for PendingUndo {
     }
 }
 
-pub enum FolderOutcomeType {
-    SuccessfullyRemoved,
+pub enum Removal {
+    Success,
     AlreadyGone,
 }
 
 struct FolderOutcome {
     pub folder: path::PathBuf,
-    outcome_type: FolderOutcomeType,
+    removal: Removal,
 }
 
 pub struct UndoOutcome {
@@ -253,11 +253,11 @@ impl fmt::Display for UndoOutcome {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for folder_res in &self.folders {
             match folder_res {
-                Ok(fo) => match fo.outcome_type {
-                    FolderOutcomeType::SuccessfullyRemoved => {
+                Ok(fo) => match fo.removal {
+                    Removal::Success => {
                         writeln!(f, "[rmdir] {:?}", fo.folder)?
                     }
-                    FolderOutcomeType::AlreadyGone => {
+                    Removal::AlreadyGone => {
                         writeln!(f, "[skipping] {:?}: already gone", fo.folder)?
                     }
                 },
@@ -286,12 +286,12 @@ impl PendingUndo {
                 Err(reason) if reason.kind() == io::ErrorKind::NotFound => {
                     folders.push(Ok(FolderOutcome {
                         folder,
-                        outcome_type: FolderOutcomeType::AlreadyGone,
+                        removal: Removal::AlreadyGone,
                     }))
                 }
                 Ok(()) => folders.push(Ok(FolderOutcome {
                     folder,
-                    outcome_type: FolderOutcomeType::SuccessfullyRemoved,
+                    removal: Removal::Success,
                 })),
                 Err(e) => folders.push(Err(FailedRmdir::new(&folder, e))),
             }
