@@ -1,6 +1,5 @@
 use clap::{Parser, ValueEnum};
 use std::env::consts;
-use std::fmt::Write;
 use std::io;
 use std::process::ExitCode;
 use std::{collections::HashMap, fs, path, process};
@@ -81,27 +80,9 @@ fn group_files(
     }
 }
 
-fn report_dry(plan: PendingUndo) -> String {
-    let mut res = String::new();
-    let n = plan.moves.len();
-    writeln!(res, "Would move {n} file(s):").expect("writing to a String cannot fail");
-
-    let mut counts: HashMap<String, usize> = HashMap::new();
-    for mv in plan.moves.iter() {
-        *counts.entry(mv.mv.category.clone()).or_default() += 1;
-    }
-
-    let mut sorted: Vec<_> = counts.into_iter().collect();
-    sorted.sort_by(|(k1, c1), (k2, c2)| c2.cmp(c1).then(k1.cmp(k2)));
-    for (k, v) in sorted.iter() {
-        writeln!(res, "  {k:<20} {v:>3}").expect("writing to a String cannot fail");
-    }
-    res
-}
-
 /// Reverse the most recent run. Report everything to stderr itself
 /// and return the process exit code
-fn undo(dry: bool) -> ExitCode {
+fn undo(dry: bool, verbose: bool) -> ExitCode {
     let Some(state_dir) = unfk::undo::state_dir(consts::OS) else {
         eprintln!("Could not determine the state directory");
         return ExitCode::FAILURE;
@@ -141,13 +122,17 @@ fn undo(dry: bool) -> ExitCode {
     // }
 
     if dry {
-        if dry {
+        if verbose {
             print!("{undo_plan}");
         }
-        report_dry(undo_plan);
+        eprint!("{}", undo_plan.report());
         return ExitCode::SUCCESS;
     }
     let undo_outcome = undo_plan.execute();
+
+    if verbose {
+        print!("{}", undo_outcome);
+    }
 
     if let Some(undo_rec) = undo_outcome.failed() {
         eprintln!("Some entries could not be reverted and remain queued for the next --undo.");
@@ -159,6 +144,8 @@ fn undo(dry: bool) -> ExitCode {
         eprintln!("Everything was reverted, but couldn't remove the undo log: {e}.");
         return ExitCode::FAILURE;
     }
+
+    eprint!("{}", undo_outcome.report());
 
     ExitCode::SUCCESS
 }
@@ -176,7 +163,7 @@ fn main() -> ExitCode {
     }
 
     if args.undo {
-        return undo(args.dry);
+        return undo(args.dry, args.verbose);
     }
 
     let Ok(path) = unfk::maybe_expand_tilde(&args.path) else {
