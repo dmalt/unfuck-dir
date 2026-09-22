@@ -255,11 +255,9 @@ impl fmt::Display for UndoOutcome {
             match folder_res {
                 Ok(fo) => match fo.removal {
                     Removal::Success => writeln!(f, "[rmdir] {:?}", fo.folder)?,
-                    Removal::AlreadyGone => {
-                        writeln!(f, "[skipping] {:?}: already gone", fo.folder)?
-                    }
+                    Removal::AlreadyGone => writeln!(f, "[rmdir] {:?} (already gone)", fo.folder)?,
                 },
-                Err(e) => writeln!(f, "[rmdir failed] '{:?}': {}", e.folder, e.reason)?,
+                Err(e) => writeln!(f, "[rmdir failed] {:?}: {}", e.folder, e.reason)?,
             }
         }
         if !self.folders.is_empty() {
