@@ -103,21 +103,21 @@ impl fmt::Display for FailedMove {
 #[derive(Debug)]
 pub struct FailedMkdir {
     pub folder: path::PathBuf,
-    pub source: io::Error,
+    pub reason: io::Error,
 }
 
 impl FailedMkdir {
     pub fn new(path: &path::Path, source: io::Error) -> Self {
         FailedMkdir {
             folder: path.to_path_buf(),
-            source,
+            reason: source,
         }
     }
 }
 
 impl fmt::Display for FailedMkdir {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Failed to create {:?}: {}", self.folder, self.source)
+        write!(f, "Failed to create {:?}: {}", self.folder, self.reason)
     }
 }
 
@@ -196,6 +196,31 @@ impl RunOutcome {
             }
         }
         res
+    }
+}
+
+impl fmt::Display for RunOutcome {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for folder_res in &self.folders {
+            match folder_res {
+                Ok(folder) => writeln!(f, "[mkdir] {folder:?}")?,
+                Err(failed_mkdir) => writeln!(
+                    f,
+                    "[mkdir failed] {:?}: {}",
+                    failed_mkdir.folder, failed_mkdir.reason
+                )?,
+            }
+        }
+        if !self.folders.is_empty() {
+            writeln!(f)?;
+        }
+        for mv_res in &self.moves {
+            match mv_res {
+                Ok(mv) => writeln!(f, "{}", mv)?,
+                Err(fmv) => writeln!(f, "[mv failed] {}: {}", fmv.mv, fmv.reason)? 
+            }
+        }
+        Ok(())
     }
 }
 
