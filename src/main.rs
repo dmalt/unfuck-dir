@@ -44,6 +44,7 @@ struct Args {
     #[arg(short = 'i', long)]
     include_dotfiles: bool, // TODO: think of a better short flag. -i is confusing
 
+    /// Undo the result of the last invocation
     #[arg(long, conflicts_with_all = ["path", "by", "include_dotfiles", "show_categories"])]
     undo: bool,
 }
