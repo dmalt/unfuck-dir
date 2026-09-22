@@ -134,9 +134,9 @@ fn undo(dry: bool, verbose: bool) -> ExitCode {
         print!("{}", undo_outcome);
     }
 
-    if let Some(undo_rec) = undo_outcome.failed() {
+    if let Some(undo_plan) = undo_outcome.failed() {
         eprintln!("Some entries could not be reverted and remain queued for the next --undo.");
-        if let Err(e) = save(&undo_rec, &state_dir) {
+        if let Err(e) = save(&undo_plan, &state_dir) {
             eprintln!("Failed to write the undo log for the failed undos: {e}.");
             return ExitCode::FAILURE;
         }
@@ -192,8 +192,8 @@ fn main() -> ExitCode {
     }
     eprint!("{}", outcome.report());
     if let Some(state_dir) = unfk::undo::state_dir(consts::OS) {
-        let undo_queue = PendingUndo::from(outcome);
-        if let Err(e) = save(&undo_queue, &state_dir) {
+        let undo_plan = PendingUndo::capture(outcome);
+        if let Err(e) = save(&undo_plan, &state_dir) {
             eprintln!(
                 "Failed to write the undo log: {e}. The files were still moved but the --undo operation would be unavailable."
             );
