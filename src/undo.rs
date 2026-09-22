@@ -170,8 +170,8 @@ impl fmt::Display for PendingUndo {
         if !self.folders.is_empty() {
             writeln!(f)?;
         }
-        for cmv in &self.moves {
-            writeln!(f, "{}", cmv.mv)?;
+        for reversal in &self.moves {
+            writeln!(f, "{}", reversal.mv)?;
         }
         Ok(())
     }
@@ -254,9 +254,7 @@ impl fmt::Display for UndoOutcome {
         for folder_res in &self.folders {
             match folder_res {
                 Ok(fo) => match fo.removal {
-                    Removal::Success => {
-                        writeln!(f, "[rmdir] {:?}", fo.folder)?
-                    }
+                    Removal::Success => writeln!(f, "[rmdir] {:?}", fo.folder)?,
                     Removal::AlreadyGone => {
                         writeln!(f, "[skipping] {:?}: already gone", fo.folder)?
                     }
@@ -270,7 +268,7 @@ impl fmt::Display for UndoOutcome {
         for mv_res in &self.moves {
             match mv_res {
                 Ok(mv) => writeln!(f, "{}", mv)?,
-                Err(fumv) => writeln!(f, "[mv failed] {}: {}", fumv.reversal.mv, fumv.reason)?,
+                Err(fail) => writeln!(f, "[mv failed] {}: {}", fail.reversal.mv, fail.reason)?,
             }
         }
         Ok(())

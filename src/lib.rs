@@ -217,7 +217,7 @@ impl fmt::Display for RunOutcome {
         for mv_res in &self.moves {
             match mv_res {
                 Ok(mv) => writeln!(f, "{}", mv)?,
-                Err(fmv) => writeln!(f, "[mv failed] {}: {}", fmv.mv, fmv.reason)?,
+                Err(fail) => writeln!(f, "[mv failed] {}: {}", fail.mv, fail.reason)?,
             }
         }
         Ok(())
