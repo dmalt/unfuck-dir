@@ -3,10 +3,10 @@ use std::fs;
 use std::io;
 use std::io::ErrorKind;
 use std::path;
+use std::time::SystemTime;
 
 use core::fmt::{self, Write};
 use serde::{Deserialize, Serialize};
-use std::time::SystemTime;
 
 use crate::Move;
 use crate::RunOutcome;
@@ -28,6 +28,12 @@ pub enum SkipReason {
 pub struct FailedUndoMove {
     reversal: ReverseMove,
     reason: SkipReason,
+}
+
+impl FailedUndoMove {
+    fn new(reversal: ReverseMove, reason: SkipReason) -> Self {
+        FailedUndoMove { reversal, reason }
+    }
 }
 
 impl fmt::Display for FailedUndoMove {
@@ -101,6 +107,13 @@ fn identity_matches(stored: &FileIdentity, actual: &FileIdentity) -> bool {
     true
 }
 
+fn read_identity(p: &path::Path) -> Option<FileIdentity> {
+    fs::metadata(p).ok().map(|md| FileIdentity {
+        mtime: md.modified().ok(),
+        size_bytes: md.len(),
+    })
+}
+
 impl ReverseMove {
     pub fn capture(mv: Move) -> Self {
         let identity = read_identity(&mv.dst);
@@ -110,18 +123,12 @@ impl ReverseMove {
 
     pub fn execute(self) -> Result<Move, FailedUndoMove> {
         if !self.mv.src.exists() {
-            return Err(FailedUndoMove {
-                reversal: self,
-                reason: SkipReason::Missing,
-            });
+            return Err(FailedUndoMove::new(self, SkipReason::Missing));
         }
 
         if self.mv.dst.exists() {
             // TODO: check if the identity matches and simply move the original
-            return Err(FailedUndoMove {
-                reversal: self,
-                reason: SkipReason::Occupied,
-            });
+            return Err(FailedUndoMove::new(self, SkipReason::Occupied));
         }
 
         let src_fi = read_identity(&self.mv.src);
@@ -129,37 +136,11 @@ impl ReverseMove {
             && let Some(stored_fi) = &self.identity
             && !identity_matches(stored_fi, actual_fi)
         {
-            return Err(FailedUndoMove {
-                reversal: self,
-                reason: SkipReason::IdentityMismatch,
-            });
+            return Err(FailedUndoMove::new(self, SkipReason::IdentityMismatch));
         }
         match self.mv.clone().execute() {
             Ok(mv) => Ok(mv),
-            Err(e) => Err(FailedUndoMove {
-                reversal: self,
-                reason: SkipReason::MoveFailure(e.reason),
-            }),
-        }
-    }
-}
-
-fn read_identity(p: &path::Path) -> Option<FileIdentity> {
-    fs::metadata(p).ok().map(|md| FileIdentity {
-        mtime: md.modified().ok(),
-        size_bytes: md.len(),
-    })
-}
-
-impl PendingUndo {
-    pub fn capture(outcome: RunOutcome) -> Self {
-        let mut moves: Vec<ReverseMove> = Vec::new();
-        for mv in outcome.moves.into_iter().filter_map(Result::ok) {
-            moves.push(ReverseMove::capture(mv));
-        }
-        PendingUndo {
-            moves,
-            folders: outcome.folders.into_iter().filter_map(Result::ok).collect(),
+            Err(e) => Err(FailedUndoMove::new(self, SkipReason::MoveFailure(e.reason))),
         }
     }
 }
@@ -298,6 +279,17 @@ impl PendingUndo {
     pub fn report(&self) -> String {
         let categories = self.moves.iter().map(|r| r.mv.category.as_str());
         count_table("Would revert", categories)
+    }
+
+    pub fn capture(outcome: RunOutcome) -> Self {
+        let mut moves: Vec<ReverseMove> = Vec::new();
+        for mv in outcome.moves.into_iter().filter_map(Result::ok) {
+            moves.push(ReverseMove::capture(mv));
+        }
+        PendingUndo {
+            moves,
+            folders: outcome.folders.into_iter().filter_map(Result::ok).collect(),
+        }
     }
 }
 
