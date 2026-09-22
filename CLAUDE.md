@@ -67,14 +67,15 @@ unfk --undo --dry
 
 ### Module Structure
 
-- **`src/main.rs`**: CLI parsing (clap), the `Plan` / `RunOutcome` types, the
-  `undo()` orchestration, and all user-facing output. Nothing here is a library
-  concern; `main.rs` *is* the presentation layer.
-- **`src/lib.rs`**: the domain — planning, executing and reversing moves. Never
-  prints; errors implement `Display` and `main` decides how to render them.
+- **`src/main.rs`**: CLI parsing (clap), the `undo()` orchestration, and all
+  user-facing output. Nothing here is a library concern; `main.rs` *is* the
+  presentation layer.
+- **`src/lib.rs`**: the forward direction — planning and executing a sort
+  (`RunPlan`, `RunOutcome`, `Move`), plus `display_path`. Never prints.
+- **`src/undo.rs`**: everything about reversing a run — the `PendingUndo` record,
+  its on-disk location (`state_dir` / `save` / `load` / `clear`), and the
+  reversal itself. Never prints.
 - **`src/group.rs`**: grouping files by type or by modification date.
-- **`src/history.rs`**: where the undo record lives on disk and how it is read,
-  written and deleted.
 - **`src/temp_env.rs`**: `#[cfg(test)]` only. A hand-rolled replacement for the
   `temp-env` crate, written deliberately as a learning exercise — do not propose
   swapping it back for the crate.
@@ -93,42 +94,64 @@ unfk --undo --dry
 - `group::by_date()`: Groups files by modification date (format: `dd-mm-yyyy`)
 - Both return `HashMap<String, Vec<PathBuf>>` where key is folder name
 
-**Plan / execute split** (`main.rs`):
+**Plan / execute / report** — the same three-step shape in both directions:
 
-- `Plan::make()` computes what *would* happen: `lib::plan_folders` + `lib::plan_moves`
-- `Plan::execute(self)` takes `self` by value, so a plan can only be run once
-- `Plan::report()` is the `--dry` summary; `Display for Plan` is the `--verbose` listing
-- `RunOutcome` holds `Vec<Result<..>>` for both folders and moves;
-  `RunOutcome::report()` formats them, `RunOutcome::pending_undo()` derives the
-  undo record
+| | forward | reverse |
+|---|---|---|
+| plan | `RunPlan::make()` | `PendingUndo` (loaded from disk) |
+| execute | `RunPlan::execute(self) -> RunOutcome` | `PendingUndo::execute(self) -> UndoOutcome` |
+| summary | `RunOutcome::report()` | `UndoOutcome::report()` |
+| `--dry` summary | `RunPlan::report()` | `PendingUndo::report()` |
+| `--verbose` listing | `Display` impls | `Display` impls |
+
+- `execute(self)` takes `self` by value, so a plan can only be run once
 - Effectful code returns data; formatting is a separate, pure step
+- `RunOutcome::capture()` → `PendingUndo` derives the undo record, keeping only
+  the successes
+
+**Path display**: every user-facing path goes through `lib::display_path`, which
+shortens `$HOME` to `~` and quotes the result. Do not print a `PathBuf` with
+`{:?}` or `.display()` directly — the output then disagrees with every other line.
 
 **Move types** — the distinction matters, don't merge them:
 
 - `Move { src, dst, category }` — an *intention*, before execution
-- `CompletedMove { mv, identity }` — a move that *happened*; `FileIdentity`
-  (size + mtime) only exists post-execution
+- `ReverseMove { mv, identity }` — a completed move, ready to be undone. Its `mv`
+  is **already flipped**, so no call site can get the rename arguments backwards.
+  `FileIdentity` (size + mtime) only exists post-execution.
 - `PendingUndo { moves, folders }` — see below
 
 **Undo** (`--undo`):
 
 - `PendingUndo` is a **to-do list of what remains to be reversed**, not a log of
   what happened. After an undo pass it is rewritten with only the entries that
-  were *not* reversed; when empty it is deleted (`history::clear`).
+  were *not* reversed (`UndoOutcome::failed()`); when empty it is deleted
+  (`undo::clear`).
 - Only *successful* moves and *successfully created* folders are recorded.
 - Reversal order: move files back first, **then** remove folders — otherwise you
-  delete the directories holding the files you are about to restore.
+  delete the directories holding the files you are about to restore. The
+  `Display` impls list them in that same order, so the log matches reality.
 - `fs::remove_dir`, never `remove_dir_all`: refusing on a non-empty directory is
-  the safety feature.
-- Each record stores size + mtime read from `dst` after the rename, because
-  destination folders are shared space. At undo time: skip on a *positive*
-  mismatch, but **proceed when verification is impossible** (no identity
-  recorded, or no mtime on the platform). Refusing would strand files forever,
-  a worse and commoner failure than touching a stranger's file.
-- `check_undo()` is the verdict; `undo_move()` is `check_undo()` plus the rename.
-  `--undo --dry` calls only the former, so it cannot mutate anything.
-- `--undo --dry` cannot predict folder removal: the files have not moved back
-  yet, so every category folder still looks non-empty.
+  the safety feature. A directory that is *already gone* counts as success
+  (`Removal::AlreadyGone`) and leaves the record.
+- Each record stores size + mtime read from the destination after the rename,
+  because destination folders are shared space. At undo time: skip on a
+  *positive* mismatch, but **proceed when verification is impossible** (no
+  identity recorded, or no mtime on the platform). Refusing would strand files
+  forever, a worse and commoner failure than touching a stranger's file.
+- The guards live inside `ReverseMove::execute` — checking is part of moving and
+  is deliberately not separable. **`--undo --dry` therefore reports the stored
+  plan, not a prediction**: it never touches the filesystem and cannot foresee a
+  skip.
+
+### Exit Codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Success, including "nothing to undo" |
+| `1` | Could not proceed: no state directory, damaged record, failed to save or clear |
+| `2` | Reserved — clap returns it for argument errors |
+| `3` | Partial undo: some entries remain queued for the next `--undo` |
 
 ### Important Notes
 
