@@ -25,7 +25,7 @@ pub enum SkipReason {
 
 #[derive(Debug)]
 pub struct FailedUndoMove {
-    pub reversal: ReverseMove,
+    reversal: ReverseMove,
     reason: SkipReason,
 }
 
@@ -37,7 +37,7 @@ impl fmt::Display for FailedUndoMove {
 
 #[derive(Debug)]
 pub struct FailedRmdir {
-    pub folder: path::PathBuf,
+    folder: path::PathBuf,
     reason: io::Error,
 }
 
@@ -81,7 +81,7 @@ struct FileIdentity {
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub struct ReverseMove {
-    pub mv: Move,
+    mv: Move,
     identity: Option<FileIdentity>,
 }
 
