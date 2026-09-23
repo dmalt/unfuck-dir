@@ -1,6 +1,6 @@
-# UNFK
+# Unfuck-dir
 
-Organize files in a folder — and put them back if you change your mind.
+Organize 'Downloads' and other file graveyards.
 
 ```txt
 ~/Downloads/a.pdf     ->  ~/Downloads/Documents/a.pdf
