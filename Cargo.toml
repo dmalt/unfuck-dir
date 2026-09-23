@@ -7,6 +7,8 @@ license = "MIT"
 readme = "README.md"
 categories = ["command-line-utilities"]
 exclude = ["CLAUDE.md", ".claude/"]
+keywords = ["cli", "files", "organize", "downloads", "undo"]
+repository = "https://github.com/dmalt/unfuck-dir"
 
 [lib]
 name = "unfk"
