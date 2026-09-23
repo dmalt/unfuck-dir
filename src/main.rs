@@ -166,6 +166,13 @@ fn main() -> ExitCode {
         );
         return ExitCode::FAILURE;
     };
+    let path = match path.canonicalize() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Cannot access '{}': {e}", args.path);
+            return ExitCode::FAILURE;
+        }
+    };
     let files_grouping = group_files(&path, args.include_dotfiles, args.by);
 
     let plan = RunPlan::make(&files_grouping, &path);
