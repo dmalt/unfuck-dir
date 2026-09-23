@@ -5,6 +5,7 @@ pub mod undo;
 mod temp_env;
 
 use core::fmt::{self, Write};
+use std::cmp::max;
 use std::collections::HashMap;
 use std::io;
 use std::{env, ffi, fs, path};
@@ -161,14 +162,15 @@ fn count_table<'a>(header: &str, noun: &str, categories: impl Iterator<Item = &'
     if total == 0 {
         writeln!(res, "{header} {total} {noun}s.").expect("writing to a String cannot fail");
         return res;
-    } else {
-        writeln!(res, "{header} {total} {noun}(s):").expect("writing to a String cannot fail");
     }
+    writeln!(res, "{header} {total} {noun}(s):").expect("writing to a String cannot fail");
 
     let mut sorted: Vec<_> = counts.into_iter().collect();
     sorted.sort_by(|(k1, c1), (k2, c2)| c2.cmp(c1).then(k1.cmp(k2)));
+    let width = sorted.iter().map(|(k, _)| k.len()).max().unwrap_or(0);
+    let width = max(width, 20);
     for (k, v) in sorted.iter() {
-        writeln!(res, "  {k:<20} {v:>3}").expect("writing to a String cannot fail");
+        writeln!(res, "  {k:<width$} {v:>3}").expect("writing to a String cannot fail");
     }
     res
 }
@@ -183,20 +185,26 @@ impl RunOutcome {
         let ok_moves = self.moves.iter().filter_map(|m| m.as_ref().ok());
         let mut res = count_table("Moved", "file", ok_moves.map(|mv| mv.category.as_str()));
 
-        let folder_errors: Vec<_> = self
-            .folders
-            .iter()
-            .filter_map(|r| r.as_ref().err())
+        let folder_errors = self.folders.iter().filter_map(|r| r.as_ref().err());
+        let folder_errors: Vec<_> = folder_errors
+            .map(|x| format!("{:?}", x.reason.kind()))
             .collect();
-        let move_errors: Vec<_> = self.moves.iter().filter_map(|r| r.as_ref().err()).collect();
-        if !folder_errors.is_empty() || !move_errors.is_empty() {
-            writeln!(res, "\nERRORS:").expect("writing to a String cannot fail");
-            for e in folder_errors {
-                writeln!(res, "{e}").expect("writing to a String cannot fail");
-            }
-            for e in move_errors {
-                writeln!(res, "{e}").expect("writing to a String cannot fail");
-            }
+        if !folder_errors.is_empty() {
+            let folder_errors = folder_errors.iter().map(String::as_str);
+            let folder_errors_table = count_table("Failed to create", "folder", folder_errors);
+            writeln!(res).expect("writing to a String cannot fail");
+            write!(res, "{}", folder_errors_table).expect("writing to a String cannot fail");
+        }
+
+        let move_errors = self.moves.iter().filter_map(|r| r.as_ref().err());
+        let move_errors: Vec<_> = move_errors
+            .map(|x| format!("{:?}", x.reason.kind()))
+            .collect();
+        if !move_errors.is_empty() {
+            let move_errors = move_errors.iter().map(String::as_str);
+            let move_errors_table = count_table("Failed to move", "file", move_errors);
+            writeln!(res).expect("writing to a String cannot fail");
+            write!(res, "{}", move_errors_table).expect("writing to a String cannot fail");
         }
         res
     }

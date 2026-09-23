@@ -63,6 +63,15 @@ impl fmt::Display for FailedRmdir {
     }
 }
 
+impl SkipReason {
+    fn report_label(&self) -> String {
+        match self {
+            Self::MoveFailure(e) => format!("MoveFailure({:?})", e.kind()),
+            other => format!("{other:?}"),
+        }
+    }
+}
+
 impl fmt::Display for SkipReason {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -239,20 +248,26 @@ impl UndoOutcome {
         let moves = self.moves.iter().filter_map(|x| x.as_ref().ok());
         let mut res = count_table("Reverted", "file", moves.map(|mv| mv.category.as_str()));
 
-        let folder_errors: Vec<_> = self
-            .folders
-            .iter()
-            .filter_map(|r| r.as_ref().err())
+        // Moves first: a move that could not be reverted is what leaves a
+        // folder non-empty, so listing it first puts cause before effect.
+        let move_errors = self.moves.iter().filter_map(|r| r.as_ref().err());
+        let move_errors: Vec<_> = move_errors.map(|x| x.reason.report_label()).collect();
+        if !move_errors.is_empty() {
+            let move_errors = move_errors.iter().map(String::as_str);
+            let move_errors_table = count_table("Failed to revert", "file", move_errors);
+            writeln!(res).expect("writing to a String cannot fail");
+            write!(res, "{}", move_errors_table).expect("writing to a String cannot fail");
+        }
+
+        let folder_errors = self.folders.iter().filter_map(|r| r.as_ref().err());
+        let folder_errors: Vec<_> = folder_errors
+            .map(|x| format!("{:?}", x.reason.kind()))
             .collect();
-        let move_errors: Vec<_> = self.moves.iter().filter_map(|r| r.as_ref().err()).collect();
-        if !folder_errors.is_empty() || !move_errors.is_empty() {
-            writeln!(res, "\nERRORS:").expect("writing to a String cannot fail");
-            for e in move_errors {
-                writeln!(res, "{e}").expect("writing to a String cannot fail");
-            }
-            for e in folder_errors {
-                writeln!(res, "{e}").expect("writing to a String cannot fail");
-            }
+        if !folder_errors.is_empty() {
+            let folder_errors = folder_errors.iter().map(String::as_str);
+            let folder_errors_table = count_table("Failed to remove", "folder", folder_errors);
+            writeln!(res).expect("writing to a String cannot fail");
+            write!(res, "{}", folder_errors_table).expect("writing to a String cannot fail");
         }
         res
     }
