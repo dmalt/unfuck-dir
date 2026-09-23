@@ -12,7 +12,7 @@ use crate::RunOutcome;
 use crate::count_table;
 use crate::display_path;
 
-const STATE_DIRNAME: &str = "unfk";
+const STATE_DIRNAME: &str = "unfuck";
 const UNDO_FNAME: &str = "undo.json";
 
 #[derive(Debug)]

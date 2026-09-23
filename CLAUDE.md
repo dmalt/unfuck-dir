@@ -11,16 +11,17 @@ code in this repository.
 - Explain concepts and trade-offs rather than implementing solutions directly
 - Guide the user to write code themselves
 - Provide hints, relevant functions/crates, and examples when asked
-- Focus on educational value - help the user understand *why* and *how*, not
-just *what*
+- Focus on educational value - help the user understand _why_ and _how_, not
+  just _what_
 
 The user is proficient in Python and is learning Rust through hands-on practice.
 
 ## Project Overview
 
 A CLI tool for organizing files in a directory by grouping them into folders
-based on either file type (extension) or modification date. The project name is
-`unfk` but displays as "downloads-sorter" in help text.
+based on either file type (extension) or modification date. Three names are in
+play: the crate is `unfuck-dir` on crates.io, the installed command is `unfuck`,
+and the library is `unfk` (so `use unfk::…` in `main.rs` keeps working).
 
 ## Build & Run Commands
 
@@ -35,32 +36,32 @@ cargo run -- [OPTIONS]
 cargo install --path .
 
 # Run after install
-unfk [OPTIONS]
+unfuck [FOLDER] [OPTIONS]
 ```
 
 ## CLI Usage Examples
 
 ```bash
-# Organize ~/Downloads by type (default)
-unfk
+# Organize ~/Downloads by type (the folder defaults to ~/Downloads)
+unfuck
 
-# Organize specific folder by date
-unfk --path ~/Desktop --by date
+# The folder is a positional argument
+unfuck ~/Desktop --by date
 
 # Preview changes without moving files
-unfk --dry
+unfuck --dry
 
 # Show available file type categories
-unfk --show-categories
+unfuck --show-categories
 
 # List every folder and move before doing them
-unfk --verbose
+unfuck --verbose
 
 # Reverse the most recent run
-unfk --undo
+unfuck --undo
 
 # Show what --undo would do, without touching anything
-unfk --undo --dry
+unfuck --undo --dry
 ```
 
 ## Architecture
@@ -68,7 +69,7 @@ unfk --undo --dry
 ### Module Structure
 
 - **`src/main.rs`**: CLI parsing (clap), the `undo()` orchestration, and all
-  user-facing output. Nothing here is a library concern; `main.rs` *is* the
+  user-facing output. Nothing here is a library concern; `main.rs` _is_ the
   presentation layer.
 - **`src/lib.rs`**: the forward direction — planning and executing a sort
   (`RunPlan`, `RunOutcome`, `Move`), plus `display_path`. Never prints.
@@ -96,13 +97,13 @@ unfk --undo --dry
 
 **Plan / execute / report** — the same three-step shape in both directions:
 
-| | forward | reverse |
-|---|---|---|
-| plan | `RunPlan::make()` | `PendingUndo` (loaded from disk) |
-| execute | `RunPlan::execute(self) -> RunOutcome` | `PendingUndo::execute(self) -> UndoOutcome` |
-| summary | `RunOutcome::report()` | `UndoOutcome::report()` |
-| `--dry` summary | `RunPlan::report()` | `PendingUndo::report()` |
-| `--verbose` listing | `Display` impls | `Display` impls |
+|                     | forward                                | reverse                                     |
+| ------------------- | -------------------------------------- | ------------------------------------------- |
+| plan                | `RunPlan::make()`                      | `PendingUndo` (loaded from disk)            |
+| execute             | `RunPlan::execute(self) -> RunOutcome` | `PendingUndo::execute(self) -> UndoOutcome` |
+| summary             | `RunOutcome::report()`                 | `UndoOutcome::report()`                     |
+| `--dry` summary     | `RunPlan::report()`                    | `PendingUndo::report()`                     |
+| `--verbose` listing | `Display` impls                        | `Display` impls                             |
 
 - `execute(self)` takes `self` by value, so a plan can only be run once
 - Effectful code returns data; formatting is a separate, pure step
@@ -115,7 +116,7 @@ shortens `$HOME` to `~` and quotes the result. Do not print a `PathBuf` with
 
 **Move types** — the distinction matters, don't merge them:
 
-- `Move { src, dst, category }` — an *intention*, before execution
+- `Move { src, dst, category }` — an _intention_, before execution
 - `ReverseMove { mv, identity }` — a completed move, ready to be undone. Its `mv`
   is **already flipped**, so no call site can get the rename arguments backwards.
   `FileIdentity` (size + mtime) only exists post-execution.
@@ -125,18 +126,18 @@ shortens `$HOME` to `~` and quotes the result. Do not print a `PathBuf` with
 
 - `PendingUndo` is a **to-do list of what remains to be reversed**, not a log of
   what happened. After an undo pass it is rewritten with only the entries that
-  were *not* reversed (`UndoOutcome::failed()`); when empty it is deleted
+  were _not_ reversed (`UndoOutcome::failed()`); when empty it is deleted
   (`undo::clear`).
-- Only *successful* moves and *successfully created* folders are recorded.
+- Only _successful_ moves and _successfully created_ folders are recorded.
 - Reversal order: move files back first, **then** remove folders — otherwise you
   delete the directories holding the files you are about to restore. The
   `Display` impls list them in that same order, so the log matches reality.
 - `fs::remove_dir`, never `remove_dir_all`: refusing on a non-empty directory is
-  the safety feature. A directory that is *already gone* counts as success
+  the safety feature. A directory that is _already gone_ counts as success
   (`Removal::AlreadyGone`) and leaves the record.
 - Each record stores size + mtime read from the destination after the rename,
   because destination folders are shared space. At undo time: skip on a
-  *positive* mismatch, but **proceed when verification is impossible** (no
+  _positive_ mismatch, but **proceed when verification is impossible** (no
   identity recorded, or no mtime on the platform). Refusing would strand files
   forever, a worse and commoner failure than touching a stranger's file.
 - The guards live inside `ReverseMove::execute` — checking is part of moving and
@@ -146,12 +147,12 @@ shortens `$HOME` to `~` and quotes the result. Do not print a `PathBuf` with
 
 ### Exit Codes
 
-| Code | Meaning |
-|---|---|
-| `0` | Success, including "nothing to undo" |
-| `1` | Could not proceed: no state directory, damaged record, failed to save or clear |
-| `2` | Reserved — clap returns it for argument errors |
-| `3` | Partial undo: some entries remain queued for the next `--undo` |
+| Code | Meaning                                                                        |
+| ---- | ------------------------------------------------------------------------------ |
+| `0`  | Success, including "nothing to undo"                                           |
+| `1`  | Could not proceed: no state directory, damaged record, failed to save or clear |
+| `2`  | Reserved — clap returns it for argument errors                                 |
+| `3`  | Partial undo: some entries remain queued for the next `--undo`                 |
 
 ### Important Notes
 
@@ -166,6 +167,16 @@ shortens `$HOME` to `~` and quotes the result. Do not print a `PathBuf` with
 
 - Duplicate file handling: choice of skip/rename/overwrite (only rename exists today)
 - `--forget` to drop an undo record that can never be completed
+- Persist per-run failures beside the undo record, inspectable with a command
+  (e.g. `--errors`). This is what lets the report _aggregate_ failures by reason
+  instead of listing every one: today the detail exists only in `--verbose`
+  output, and re-running with `--verbose` cannot reproduce it because the run
+  already happened. Design notes: keep it in its own file, not inside
+  `PendingUndo` — the record is a shrinking to-do list, a failure log is
+  replaced wholesale each run; `io::Error` is not `Serialize`, so the persisted
+  shape needs a mirror type holding `kind` and `message` as strings; and it must
+  record which operation produced it, since both sorting and undoing generate
+  failures into the same last-run-wins slot.
 - `--format json` for machine-readable output
 - Atomic writes for the undo record (temp file + rename)
 - Date range filtering
