@@ -16,14 +16,14 @@ cargo install --path .
 ## Usage
 
 ```sh
-unfk                            # organize ~/Downloads by file type
-unfk --path ~/Desktop --by date # organize another folder, grouped by date
-unfk --dry                      # show what would happen, change nothing
-unfk --verbose                  # list every folder and move as it happens
-unfk --include-dotfiles         # don't skip dotfiles
-unfk --show-categories          # print the type -> extension table and exit
-unfk --undo                     # reverse the most recent run
-unfk --undo --dry               # show what --undo would do
+unfuck                            # organize ~/Downloads by file type
+unfuck --path ~/Desktop --by date # organize another folder, grouped by date
+unfuck --dry                      # show what would happen, change nothing
+unfuck --verbose                  # list every folder and move as it happens
+unfuck --include-dotfiles         # don't skip dotfiles
+unfuck --show-categories          # print the type -> extension table and exit
+unfuck --undo                     # reverse the most recent run
+unfuck --undo --dry               # show what --undo would do
 ```
 
 Files that would collide at the destination are renamed rather than overwritten:
