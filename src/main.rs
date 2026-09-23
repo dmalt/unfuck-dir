@@ -211,11 +211,11 @@ fn main() -> ExitCode {
 mod tests {
     use std::path::PathBuf;
 
-    use unfk::{Move, RunOutcome};
+    use unfk::{FailedMove, Move, RunOutcome};
 
-    use std::io;
+    use std::io::{self, ErrorKind};
 
-    fn ok_move(src: &str, cat: &str) -> Result<Move, unfk::FailedMove> {
+    fn ok_move(src: &str, cat: &str) -> Result<Move, FailedMove> {
         let dst = src.replace("src", "dst");
         let mv = Move {
             src: PathBuf::from(src),
@@ -225,45 +225,59 @@ mod tests {
         Ok(mv)
     }
 
-    fn fail_move(src: &str, cat: &str) -> Result<Move, unfk::FailedMove> {
+    fn fail_move(src: &str, cat: &str, kind: ErrorKind) -> Result<Move, FailedMove> {
         let dst = src.replace("src", "dst");
         let mv = Move {
             src: PathBuf::from(src),
             dst: PathBuf::from(dst),
             category: String::from(cat),
         };
-        let source = io::Error::new(io::ErrorKind::NotFound, "test_error");
-        Err(unfk::FailedMove::new(mv, source))
+        let source = io::Error::new(kind, "test_error");
+        Err(FailedMove::new(mv, source))
     }
 
     #[test]
-    fn outcome_report_shows_correct_counts_and_errors() {
+    fn outcome_report_groups_failures_by_reason() {
         let moves = vec![
             ok_move("/doc1_src.pdf", "Documents"),
-            ok_move("/doc2_src.pdf", "Documents"),
-            ok_move("/book1_src.epub", "Books"),
-            fail_move("/book2_src.avi", "Books"),
-            fail_move("/movie1_src.avi", "Movies"),
+            fail_move("/doc2_src.pdf", "Documents", ErrorKind::NotFound),
+            fail_move("/doc3_src.pdf", "Documents", ErrorKind::NotFound),
+            fail_move("/doc4_src.pdf", "Documents", ErrorKind::PermissionDenied),
         ];
-        let folders = vec![
-            Ok(PathBuf::from("./Documents")),
-            Ok(PathBuf::from("./Books")),
-            Ok(PathBuf::from("./Movies")),
-        ];
-        let outcome = RunOutcome { moves, folders };
-        let stats = outcome.report();
-        let mut rows = stats.lines();
-        println!("{stats}");
-        assert_eq!(rows.next(), Some("Moved 3 file(s):"));
+        let folders = vec![Ok(PathBuf::from("/Documents"))];
+
+        let report = RunOutcome { moves, folders }.report();
+        println!("{report}");
+        let mut rows = report.lines();
+
+        assert_eq!(rows.next(), Some("Moved 1 file(s):"));
         let cols1: Vec<_> = rows.next().expect("row 1").split_whitespace().collect();
-        assert_eq!(cols1, ["Documents", "2"]);
-        let cols2: Vec<_> = rows.next().expect("row 2").split_whitespace().collect();
-        assert_eq!(cols2, ["Books", "1"]);
+        assert_eq!(cols1, ["Documents", "1"]);
         assert_eq!(rows.next(), Some(""));
 
-        assert!(rows.next().unwrap().contains("ERRORS"));
-        assert!(rows.next().unwrap().contains("book2_src.avi"));
-        assert!(rows.next().unwrap().contains("movie1_src.avi"));
+        assert_eq!(rows.next(), Some("Failed to move 3 file(s):"));
+        let cols2: Vec<_> = rows.next().expect("row 2").split_whitespace().collect();
+        assert_eq!(cols2, ["NotFound", "2"]);
+        let cols3: Vec<_> = rows.next().expect("row 3").split_whitespace().collect();
+        assert_eq!(cols3, ["PermissionDenied", "1"]);
         assert_eq!(rows.next(), None);
+    }
+
+    #[test]
+    fn outcome_report_omits_failure_sections_when_nothing_failed() {
+        let moves = vec![ok_move("/doc1_src.pdf", "Documents")];
+        let folders = vec![Ok(PathBuf::from("/Documents"))];
+
+        let report = RunOutcome { moves, folders }.report();
+        let mut rows = report.lines();
+
+        assert_eq!(rows.next(), Some("Moved 1 file(s):"));
+        let cols1: Vec<_> = rows.next().expect("row 1").split_whitespace().collect();
+        assert_eq!(cols1, ["Documents", "1"]);
+        assert_eq!(
+            rows.next(),
+            None,
+            "no empty failure tables, no trailing blank"
+        );
     }
 }
