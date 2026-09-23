@@ -1,7 +1,19 @@
 [package]
-name = "unfk"
+name = "unfuck-dir"
 version = "0.1.0"
 edition = "2024"
+description = "Organize 'Downloads' and other file graveyards."
+license = "MIT"
+readme = "README.md"
+categories = ["command-line-utilities"]
+exclude = ["CLAUDE.md", ".claude/"]
+
+[lib]
+name = "unfk"
+
+[[bin]]
+name = "unfuck"
+path = "src/main.rs"
 
 [dependencies]
 chrono = "0.4.42"
