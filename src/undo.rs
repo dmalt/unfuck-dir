@@ -192,7 +192,7 @@ impl PendingUndo {
 
     pub fn report(&self) -> String {
         let categories = self.moves.iter().map(|r| r.mv.category.as_str());
-        count_table("Would revert", categories)
+        count_table("Would revert", "file", categories)
     }
 
     pub fn capture(outcome: RunOutcome) -> Self {
@@ -237,7 +237,7 @@ impl UndoOutcome {
 
     pub fn report(&self) -> String {
         let moves = self.moves.iter().filter_map(|x| x.as_ref().ok());
-        let mut res = count_table("Reverted", moves.map(|mv| mv.category.as_str()));
+        let mut res = count_table("Reverted", "file", moves.map(|mv| mv.category.as_str()));
 
         let folder_errors: Vec<_> = self
             .folders

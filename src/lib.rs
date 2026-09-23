@@ -149,7 +149,7 @@ impl fmt::Display for Move {
     }
 }
 
-fn count_table<'a>(header: &str, categories: impl Iterator<Item = &'a str>) -> String {
+fn count_table<'a>(header: &str, noun: &str, categories: impl Iterator<Item = &'a str>) -> String {
     let mut total = 0usize;
     let mut counts: HashMap<&str, usize> = HashMap::new();
     for category in categories {
@@ -158,7 +158,12 @@ fn count_table<'a>(header: &str, categories: impl Iterator<Item = &'a str>) -> S
     }
 
     let mut res = String::new();
-    writeln!(res, "{header} {total} file(s):").expect("writing to a String cannot fail");
+    if total == 0 {
+        writeln!(res, "{header} {total} {noun}s.").expect("writing to a String cannot fail");
+        return res;
+    } else {
+        writeln!(res, "{header} {total} {noun}(s):").expect("writing to a String cannot fail");
+    }
 
     let mut sorted: Vec<_> = counts.into_iter().collect();
     sorted.sort_by(|(k1, c1), (k2, c2)| c2.cmp(c1).then(k1.cmp(k2)));
@@ -176,7 +181,7 @@ pub struct RunOutcome {
 impl RunOutcome {
     pub fn report(&self) -> String {
         let ok_moves = self.moves.iter().filter_map(|m| m.as_ref().ok());
-        let mut res = count_table("Moved", ok_moves.map(|mv| mv.category.as_str()));
+        let mut res = count_table("Moved", "file", ok_moves.map(|mv| mv.category.as_str()));
 
         let folder_errors: Vec<_> = self
             .folders
@@ -301,7 +306,7 @@ impl RunPlan {
 
     pub fn report(&self) -> String {
         let categories = self.moves.iter().map(|mv| mv.category.as_str());
-        count_table("Would move", categories)
+        count_table("Would move", "file", categories)
     }
 }
 
