@@ -17,7 +17,7 @@ cargo install --path .
 
 ```sh
 unfuck                            # organize ~/Downloads by file type
-unfuck --path ~/Desktop --by date # organize another folder, grouped by date
+unfuck ~/Desktop --by date        # organize another folder, grouped by date
 unfuck --dry                      # show what would happen, change nothing
 unfuck --verbose                  # list every folder and move as it happens
 unfuck --include-dotfiles         # don't skip dotfiles
@@ -45,7 +45,7 @@ file you cannot restore today — because something else now sits in its place, 
 because it has changed since it was moved — stays queued for the next `--undo`
 rather than being silently dropped. When the list empties, the record is deleted.
 
-Before moving a file back, unfk checks that it is still the file it moved (size
+Before moving a file back, unfuck checks that it is still the file it moved (size
 and modification time). If it is not, that entry is skipped and reported. After
 we revert the files, we remove the empty category folders; a folder containing
 anything unexpected is left in place.
