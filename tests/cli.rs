@@ -10,13 +10,23 @@ fn unfuck(home: &Path) -> Command {
     cmd
 }
 
+fn assert_success(out: &std::process::Output, what: &str) {
+    assert!(
+        out.status.success(),
+        "{what} failed with {:?}\n--- stdout ---\n{}--- stderr ---\n{}",
+        out.status.code(),
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr),
+    );
+}
+
 #[test]
 fn binary_runs() {
     let out = std::process::Command::new(BIN)
         .arg("--show-categories")
         .output()
         .unwrap();
-    assert!(out.status.success());
+    assert_success(&out, "--show-categories");
 }
 
 #[cfg(unix)]
@@ -28,10 +38,10 @@ fn state_is_written_under_the_overridden_home() {
 
     let out = unfuck(home.path())
         .current_dir(work.path())
-        .args(["-p", "."])
+        .arg(".")
         .output()
         .unwrap();
-    assert!(out.status.success());
+    assert_success(&out, "sort");
 
     assert!(home.path().read_dir().unwrap().next().is_some());
 }
@@ -47,12 +57,11 @@ fn undo_removes_folders_when_run_from_another_directory() {
 
     let out = unfuck(home.path())
         .current_dir(work.path())
-        .args(["-p", "."])
+        .arg(".")
         .output()
         .unwrap();
-    assert!(out.status.success());
+    assert_success(&out, "sort");
 
-    // check the forward pass moved the file
     assert!(work.path().join("Documents/a.pdf").exists());
     assert!(!work.path().join("a.pdf").exists());
 
@@ -63,7 +72,7 @@ fn undo_removes_folders_when_run_from_another_directory() {
         .unwrap();
     assert!(
         out.status.success(),
-        "undo failed with {:?}\n--- stdtout ---\n{}\n--- stderr ---\n{}",
+        "undo failed with {:?}\n--- stdout ---\n{}\n--- stderr ---\n{}",
         out.status.code(),
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
