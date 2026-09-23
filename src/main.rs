@@ -10,19 +10,20 @@ use unfk::{RunPlan, display_path};
 const EXIT_PARTIAL: u8 = 3;
 
 #[derive(Parser)]
-#[command(name = "unfuck")]
-#[command(version)]
-#[command(about)]
-#[command(after_long_help = "\
-EXIT CODES:
-  0  success, including \"nothing to undo\"
+#[command(
+    name = "unfuck",
+    version,
+    about,
+    after_long_help = r#"EXIT CODES:
+  0  success, including "nothing to undo"
   1  could not proceed (no state directory, damaged record, write failure)
   2  invalid arguments
   3  partial undo: some entries were not reverted and remain queued
-")]
+"#
+)]
 struct Args {
     /// Path to the folder to organize
-    #[arg(short, long, default_value = "~/Downloads")]
+    #[arg(default_value = "~/Downloads", value_name = "FOLDER")]
     path: String,
 
     /// Group files by type or date
