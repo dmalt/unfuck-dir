@@ -10,7 +10,7 @@ Organize 'Downloads' and other file graveyards.
 ## Installation
 
 ```sh
-cargo install --path .
+cargo install unfuck-dir
 ```
 
 ## Usage
