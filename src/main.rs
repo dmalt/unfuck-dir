@@ -10,8 +10,9 @@ use unfk::{RunPlan, display_path};
 const EXIT_PARTIAL: u8 = 3;
 
 #[derive(Parser)]
-#[command(name = "downloads-sorter")]
-#[command(about = "Organize files by date or type.")]
+#[command(name = "unfuck")]
+#[command(version)]
+#[command(about)]
 #[command(after_long_help = "\
 EXIT CODES:
   0  success, including \"nothing to undo\"
