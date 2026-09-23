@@ -3,18 +3,68 @@ use std::collections::HashMap;
 use std::{fs, io, path, sync};
 
 const TYPE_TO_EXTS: &[(&str, &[&str])] = &[
-    ("Images", &["jpg", "jpeg", "png", "svg", "gif", "ai"]),
-    ("Books", &["epub", "mobi"]),
-    ("Documents", &["txt", "pdf", "md", "docx", "doc", "html"]),
-    ("Data", &["csv", "parquet", "xml"]),
-    ("Archives", &["zip", "rar", "tar", "gz"]),
-    ("Code", &["py", "sh", "go", "rs"]),
-    ("Apps", &["dmg"]),
+    (
+        "Images",
+        &[
+            "jpg", "jpeg", "png", "gif", "bmp", "tif", "tiff", "webp", "avif", "heic", "heif",
+            "svg", "ico", "psd", "ai", "eps", "dng", "cr2", "nef", "arw", "raw",
+        ],
+    ),
+    (
+        "Books",
+        &["epub", "mobi", "azw3", "fb2", "djvu", "cbz", "cbr"],
+    ),
+    (
+        "Documents",
+        &[
+            "txt", "rtf", "md", "pdf", "doc", "docx", "odt", "pages", "tex", "html", "htm", "xls",
+            "xlsx", "ods", "numbers", "ppt", "pptx", "odp", "keynote",
+        ],
+    ),
+    (
+        "Data",
+        &[
+            "csv", "tsv", "json", "jsonl", "ndjson", "xml", "yaml", "yml", "toml", "ini",
+            "parquet", "avro", "orc", "db", "sqlite", "sqlite3",
+        ],
+    ),
+    (
+        "Archives",
+        &[
+            "zip", "rar", "7z", "tar", "gz", "tgz", "bz2", "xz", "zst", "iso",
+        ],
+    ),
+    (
+        "Code",
+        &[
+            "py", "ipynb", "sh", "bash", "zsh", "fish", "go", "rs", "lua", "c", "h", "cpp", "hpp",
+            "cc", "java", "kt", "swift", "rb", "php", "pl", "r", "sql", "js", "mjs", "cjs", "ts",
+            "tsx", "jsx", "css", "scss", "hs", "ex", "exs", "zig", "vim", "el", "patch", "diff",
+        ],
+    ),
+    (
+        "Apps",
+        &[
+            "dmg", "pkg", "app", "exe", "msi", "deb", "rpm", "appimage", "apk", "snap",
+        ],
+    ),
+    ("Fonts", &["ttf", "otf", "ttc", "woff", "woff2"]),
     ("Keyboard Layouts", &["uf2", "keymap"]),
-    ("Tracks", &["gpx"]),
-    ("Videos", &["mkv", "mp4", "avi"]),
+    ("Tracks", &["gpx", "tcx", "fit", "kml", "kmz"]),
+    (
+        "Videos",
+        &[
+            "mp4", "m4v", "mkv", "avi", "mov", "webm", "wmv", "flv", "mpg", "mpeg", "3gp",
+        ],
+    ),
     ("Torrents", &["torrent"]),
-    ("Music", &["mp3", "aac", "flac", "wav"]),
+    (
+        "Music",
+        &[
+            "mp3", "m4a", "aac", "flac", "alac", "wav", "aiff", "aif", "ogg", "opus", "wma", "mid",
+            "midi",
+        ],
+    ),
 ];
 
 static EXT_TO_TYPE: sync::LazyLock<HashMap<&str, &str>> = sync::LazyLock::new(|| {
@@ -68,8 +118,9 @@ pub fn by_type(files: impl Iterator<Item = fs::DirEntry>) -> HashMap<String, Vec
         let ext = path
             .extension()
             .and_then(|e| e.to_str())
-            .unwrap_or("no_extension");
-        let file_type = get_file_type(ext);
+            .unwrap_or("no_extension")
+            .to_lowercase();
+        let file_type = get_file_type(&ext);
         files_by_type.entry(file_type).or_default().push(path);
     }
     files_by_type
@@ -93,4 +144,23 @@ pub fn by_date(
         files_by_date.entry(date_string).or_default().push(path);
     }
     Ok(files_by_date)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use crate::group::TYPE_TO_EXTS;
+
+    #[test]
+    fn no_ext_appears_in_two_categories() {
+        let mut seen: HashMap<&str, &str> = HashMap::new();
+        for (ftype, exts) in TYPE_TO_EXTS {
+            for ext in *exts {
+                if let Some(prev) = seen.insert(ext, ftype) {
+                    panic!("'{ext}' appears in both {prev} and {ftype}");
+                }
+            }
+        }
+    }
 }
