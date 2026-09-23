@@ -162,6 +162,11 @@ shortens `$HOME` to `~` and quotes the result. Do not print a `PathBuf` with
 - Duplicate destinations are auto-renamed (`file__1.txt`) by `make_nonexistent_dst`
 - `main()` and `undo()` return `ExitCode` rather than calling `process::exit`, so
   destructors run; `group_files` is the one remaining place that aborts directly
+- `STATE_DIRNAME` is user-visible and names the directory holding pending undo
+  records. **Renaming it strands every existing record**: `load` then finds
+  nothing and the tool cheerfully reports "Nothing to undo" while the old
+  directory keeps the data. If it ever changes again, move the directory in the
+  same commit or ship a migration.
 
 ## Planned Features
 

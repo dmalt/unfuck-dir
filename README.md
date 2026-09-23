@@ -32,8 +32,8 @@ Files that would collide at the destination are renamed rather than overwritten:
 ## Undo
 
 Each real run records what it did under the OS state directory
-(`~/Library/Application Support/unfk` on macOS, `$XDG_STATE_HOME/unfk` or
-`~/.local/state/unfk` on Linux and the BSDs). `--undo` moves the files back and
+(`~/Library/Application Support/unfuck` on macOS, `$XDG_STATE_HOME/unfuck` or
+`~/.local/state/unfuck` on Linux and the BSDs). `--undo` moves the files back and
 removes the folders it created.
 
 Only the most recent run is recorded, so sorting twice makes the first run
