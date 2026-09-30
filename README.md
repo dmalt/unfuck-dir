@@ -109,7 +109,3 @@ cargo check  # see if the code compiles without building the binary; faster than
 ```
 
 `CLAUDE.md` documents the internal design and the reasoning behind it.
-
-## References
-
-[the book](https://doc.rust-lang.org/book/ch01-03-hello-cargo.html)
