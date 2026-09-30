@@ -1,11 +1,48 @@
 # Unfuck-dir
 
-Organize 'Downloads' and other file graveyards.
-
 ```txt
-~/Downloads/a.pdf     ->  ~/Downloads/Documents/a.pdf
-~/Downloads/holiday.jpg  ->  ~/Downloads/Images/holiday.jpg
+    /\          .   *
+   /**\       * UN#@%!            .   *   .
+  /____\     /  .     *        .              .
+  ( o_o)    /              ?                     [[[]]]
+  /|   |___o          @   [~]  {}                {{{}}}
+ / |___|             _.-[_]-(@)-._  %            ((()))
+   /   \        __.-~[#]~{}~@~[_]~-.__           @@@###
+
+A magic spell for the darkest corners of the filesystem.
 ```
+
+Organizes 'Downloads' and other file graveyards:
+
+```console
+$ ls ~/Downloads
+holiday.jpg  notes.txt  report.pdf  setup.dmg  song.mp3
+
+$ unfuck
+Moved 5 file(s):
+  Documents              2
+  Apps                   1
+  Images                 1
+  Music                  1
+
+$ tree ~/Downloads
+~/Downloads
+├── Apps
+│   └── setup.dmg
+├── Documents
+│   ├── notes.txt
+│   └── report.pdf
+├── Images
+│   └── holiday.jpg
+└── Music
+    └── song.mp3
+```
+
+It's safe to point at a folder you care about:
+
+- `--dry` shows the plan without touching anything
+- `--undo` puts files back where they were ([details](#undo))
+- nothing is overwritten: name collisions get a suffix instead (`a__1.pdf`)
 
 ## Installation
 

@@ -14,6 +14,16 @@ const EXIT_PARTIAL: u8 = 3;
     name = "unfuck",
     version,
     about,
+    before_long_help = r#"
+    /\          .   *
+   /**\       * UN#@%!            .   *   .
+  /____\     /  .     *        .              .
+  ( o_o)    /              ?                     [[[]]]
+  /|   |___o          @   [~]  {}                {{{}}}
+ / |___|             _.-[_]-(@)-._  %            ((()))
+   /   \        __.-~[#]~{}~@~[_]~-.__           @@@###
+
+A magic spell for the darkest corners of the filesystem."#,
     after_long_help = r#"EXIT CODES:
   0  success, including "nothing to undo"
   1  could not proceed (no state directory, damaged record, write failure)
@@ -22,11 +32,11 @@ const EXIT_PARTIAL: u8 = 3;
 "#
 )]
 struct Args {
-    /// Path to the folder to organize
+    /// Path to the target folder
     #[arg(default_value = "~/Downloads", value_name = "FOLDER")]
     path: String,
 
-    /// Group files by type or date
+    /// How to group files
     #[arg(long, default_value = "type")]
     by: GroupMode,
 
@@ -38,11 +48,11 @@ struct Args {
     #[arg(short, long, default_value = "false")]
     verbose: bool,
 
-    /// Just show the current file extension groups that are used with by="type" and exit
+    /// Just show current file extension groups that are used with `--by type` and exit
     #[arg(short, long, conflicts_with_all = ["path", "by", "include_dotfiles"])]
     show_categories: bool,
 
-    /// Include the dotfiles
+    /// Include files starting with '.' (hidden on Unix)
     #[arg(short = 'i', long)]
     include_dotfiles: bool, // TODO: think of a better short flag. -i is confusing
 
@@ -53,7 +63,9 @@ struct Args {
 
 #[derive(Clone, ValueEnum)]
 enum GroupMode {
+    /// By file type, determined by the file extension
     Type,
+    /// By modification date
     Date,
 }
 
