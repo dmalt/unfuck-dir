@@ -145,7 +145,7 @@ Instead, the release is generated manually:
 
 1. Bump the version in `Cargo.toml`, run `cargo check` to update the lockfile
 2. Commit all the changes, e.g. `git add -u && git commit -m "chore(release): 0.2.2"`
-3. Tag it, e.g. `git tag -a v0.2.2 -m "0.2.2: new logo and clearer help text"`. The
+3. Tag it, e.g. `git tag -a v0.2.2 -m "Release notes"`. The
    annotation message will appear in the release notes.
 4. Push the tag with `git push --follow-tags`
 5. Build and publish the artefacts with

@@ -18,6 +18,9 @@ if ! git tag --points-at HEAD | grep -qx "$tag"; then
     exit 1
 fi
 
+# ------------ Cargo --------------- #
+# cargo wants a clean folder so it's important it goes first 
+cargo publish
 
 # ------------ MacOS --------------- #
 cargo build --release --target aarch64-apple-darwin
@@ -32,8 +35,6 @@ CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=rust-lld \
     cargo build --release --target x86_64-unknown-linux-musl
 tar -czf unfuck-linux-x86_64.tar.gz -C target/x86_64-unknown-linux-musl/release unfuck
 
-# ------------ Cargo --------------- #
-cargo publish
 
 gh release create "$tag" ./*.tar.gz --title "$tag" --notes-from-tag
 
