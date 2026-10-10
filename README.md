@@ -1,6 +1,6 @@
 # Unfuck-dir
 
-```txt
+```
     /\          .   *
    /**\       * UN#@%!            .   *   .
   /____\     /  .     *        .              .
@@ -45,6 +45,31 @@ It's safe to point at a folder you care about:
 - nothing is overwritten: name collisions get a suffix instead (`a__1.pdf`)
 
 ## Installation
+
+### MacOS
+
+```sh
+mkdir -p ~/.local/bin
+curl -fsSL https://github.com/dmalt/unfuck-dir/releases/latest/download/unfuck-macos-universal.tar.gz \
+    | tar -xz -C ~/.local/bin unfuck
+```
+
+`~/.local/bin` is not in the `PATH` on MacOS by defalut, so you might want to add
+it, e.g.
+
+```sh
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+```
+
+### Linux
+
+```sh
+mkdir -p ~/.local/bin
+curl -fsSL https://github.com/dmalt/unfuck-dir/releases/latest/download/unfuck-macos-universal.tar.gz \
+    | tar -xz -C ~/.local/bin unfuck
+```
+
+### Build from source
 
 ```sh
 cargo install unfuck-dir
@@ -106,6 +131,36 @@ cargo clippy --all-targets
 cargo fmt
 cargo run -- --dry
 cargo check  # see if the code compiles without building the binary; faster than build
+```
+
+### Releasing
+
+There's no fancy CI build system in place for two reasons:
+
+- Setting up CI results in a disproportionate amount of code to maintain for something very simple
+- I'd rather not use 3rd party tools where I can avoid them, especially since
+  this project is mostly for fun and learning.
+
+Instead, the release is generated manually:
+
+1. Bump the version in `Cargo.toml`, run `cargo check` to update the lockfile
+2. Commit all the changes, e.g. `git add -u && git commit -m "chore(release): 0.2.2"`
+3. Tag it, e.g. `git tag -a v0.2.2 -m "0.2.2: new logo and clearer help text"`. The
+   annotation message will appear in the release notes.
+4. Push the tag with `git push --follow-tags`
+5. Build and publish the artefacts with
+
+   ```sh
+   ./release.sh
+   ```
+
+#### Build setup
+
+Run once to add the targets:
+
+```sh
+rustup target add x86_64-apple-darwin
+rustup target add x86_64-unknown-linux-musl
 ```
 
 `CLAUDE.md` documents the internal design and the reasoning behind it.
