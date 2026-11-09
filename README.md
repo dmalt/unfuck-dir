@@ -65,7 +65,7 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
 
 ```sh
 mkdir -p ~/.local/bin
-curl -fsSL https://github.com/dmalt/unfuck-dir/releases/latest/download/unfuck-macos-universal.tar.gz \
+curl -fsSL https://github.com/dmalt/unfuck-dir/releases/latest/download/unfuck-linux-x86_64.tar.gz \
     | tar -xz -C ~/.local/bin unfuck
 ```
 
